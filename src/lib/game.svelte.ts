@@ -164,7 +164,7 @@ export const storeCatalog: Store[] = storesData.stores;
 
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
-const DEV_TARGET = 120;
+const DEV_TARGET_PER_POWER = 120;
 const PEAK_YEARS = 5;
 const SALES_SHARE = [0, 0.35, 0.25, 0.15, 0.1, 0.08, 0.07];
 const LONG_TAIL_RATE = 0.005; // ロングテール週間販売率（期待売上の0.5%/週）
@@ -212,6 +212,15 @@ function findHardware(id: string) {
 
 export function hwName(id: string): string {
   return findHardware(id)?.name ?? id;
+}
+
+export function hardwarePower(id: string): number {
+  return findHardware(id)?.params?.power ?? 5;
+}
+
+// 開発目標値: ハードのスペック(power)に比例して増える。高スペックほど作り込める＝時間がかかる
+export function devTarget(hardwareId: string): number {
+  return hardwarePower(hardwareId) * DEV_TARGET_PER_POWER;
 }
 
 export function compatMark(genre: string, content: string): string {
@@ -1081,7 +1090,7 @@ export function advanceWeek() {
         const devSpeed = (1 + 0.1 * techLevel('fast_dev')) * leadBonus;
         d.progress += (speed / 12) * devSpeed;
         d.bug += Math.random() * 1.5;
-        if (d.progress >= DEV_TARGET) {
+        if (d.progress >= devTarget(d.hardwareId)) {
           d.stage = 'バグ取り';
           reports.push(`「${d.name}」の開発が完了しました。バグ取りを開始します（バグ ${Math.floor(d.bug)}）`);
         }

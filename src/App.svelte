@@ -39,6 +39,7 @@
     startHardware,
     canDevelopHardware,
     hwName,
+    devTarget,
     restock,
     disposeCatalog,
     unitCost,
@@ -222,8 +223,8 @@
       <div class="prow">
         <span class="plabel">{s.name}: 「{s.dev!.name}」{s.dev!.stage}</span>
         {#if s.dev!.stage === '開発'}
-          <progress value={Math.min(100, s.dev!.progress / 2)} max={100}></progress>
-          <span class="pct">{Math.floor(Math.min(100, s.dev!.progress / 2))}%</span>
+          <progress value={Math.min(100, (s.dev!.progress / devTarget(s.dev!.hardwareId)) * 100)} max={100}></progress>
+          <span class="pct">{Math.floor(Math.min(100, (s.dev!.progress / devTarget(s.dev!.hardwareId)) * 100))}%</span>
         {:else}
           <progress value={bugCleared(s.dev!.bug)} max={100}></progress>
           <span class="pnote">バグ {Math.floor(s.dev!.bug)}</span>
@@ -295,8 +296,8 @@
           {#if s.dev}
             {#if s.dev.stage === '開発'}
               <p>開発中: 「{s.dev.name}」({s.dev.genre} × {s.dev.content} / {hwName(s.dev.hardwareId)})</p>
-              <progress value={Math.min(100, s.dev.progress / 2)} max={100}></progress>
-              <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
+              <progress value={Math.min(100, (s.dev.progress / devTarget(s.dev.hardwareId)) * 100)} max={100}></progress>
+              <p>進捗 {Math.min(100, Math.floor((s.dev.progress / devTarget(s.dev.hardwareId)) * 100))}% / バグ {Math.floor(s.dev.bug)}</p>
             {:else}
               <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
               <progress value={bugCleared(s.dev.bug)} max={100}></progress>
@@ -369,8 +370,8 @@
             ハード
             <select bind:value={devHardware}>
               <option value="">（自動: 最初の1番目）</option>
-              {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
-              {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円）</option>{/each}
+              {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}・性能{h.params.power}）</option>{/each}
+              {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円・性能{h.params.power}）</option>{/each}
             </select>
           </label>
           <p>相性: {compat}（{devGenre} × {devContent}）</p>
