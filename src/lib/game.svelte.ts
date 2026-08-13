@@ -3,6 +3,7 @@ import employeesData from '../../data/employees.json';
 import tenantsData from '../../data/tenants.json';
 import technologiesData from '../../data/technologies.json';
 import rolesData from '../../data/roles.json';
+import contractsData from '../../data/contracts.json';
 
 export interface Employee {
   id: string;
@@ -119,6 +120,28 @@ export interface CatalogGame {
   soldTotal: number;
 }
 
+export interface Contract {
+  id: string;
+  name: string;
+  desc: string;
+  reward: number;
+  deadline: number;
+  minFame: number;
+  target: number;
+}
+
+interface ActiveContract {
+  id: string;
+  name: string;
+  reward: number;
+  deadline: number;
+  target: number;
+  progress: number;
+  elapsed: number;
+}
+
+export const contractCatalog: Contract[] = contractsData.contracts;
+
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
 const DEV_TARGET = 200;
@@ -217,6 +240,8 @@ const initialState = {
   grandPrix: 0,
   catalog: [] as CatalogGame[],
   hallOfFame: [] as CompletedGame[],
+  activeContract: null as ActiveContract | null,
+  doneContracts: [] as string[],
   totalSales: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
@@ -777,6 +802,32 @@ export function disposeCatalog(idx: number) {
   g.inventory = 0;
 }
 
+// 受注開発（外注納品）
+export function availableContracts(): Contract[] {
+  return contractCatalog.filter((c) => c.minFame <= game.fame && !game.doneContracts.includes(c.id));
+}
+
+export function acceptContract(id: string) {
+  if (game.activeContract) {
+    game.lastReport = 'すでに受注案件を抱えています';
+    return;
+  }
+  const c = contractCatalog.find((x) => x.id === id);
+  if (!c) return;
+  if (game.employees.length === 0) {
+    game.lastReport = '社員がいません。先に雇用してください';
+    return;
+  }
+  game.activeContract = { id: c.id, name: c.name, reward: c.reward, deadline: c.deadline, target: c.target, progress: 0, elapsed: 0 };
+  game.lastReport = `受注案件「${c.name}」を受注しました（報酬 ${c.reward.toLocaleString()}円 / 納期 ${c.deadline}週）`;
+}
+
+export function cancelContract() {
+  if (!game.activeContract) return;
+  game.activeContract = null;
+  game.lastReport = '受注案件をキャンセルしました';
+}
+
 export function finishGame(studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio || !studio.dev || studio.dev.stage !== 'バグ取り') return;
@@ -975,6 +1026,22 @@ export function advanceWeek() {
     if (tailSold > 0) {
       game.money += tailRevenue;
       reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${tailRevenue.toLocaleString()}円）`);
+    }
+  }
+
+  // 受注開発の進行
+  if (game.activeContract) {
+    const c = game.activeContract;
+    const speed = game.employees.reduce((s, e) => s + e.speed, 0);
+    c.progress += speed / 12;
+    c.elapsed += 1;
+    if (c.progress >= c.target) {
+      const onTime = c.elapsed <= c.deadline;
+      const pay = onTime ? c.reward : Math.round(c.reward * 0.6);
+      game.money += pay;
+      game.doneContracts.push(c.id);
+      reports.push(`受注案件「${c.name}」を納品しました（報酬 ${pay.toLocaleString()}円${onTime ? '' : '・納期遅れで減額'}）`);
+      game.activeContract = null;
     }
   }
 
