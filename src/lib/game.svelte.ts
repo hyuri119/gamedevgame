@@ -59,6 +59,7 @@ export interface Studio {
   inventory: number;
   onSale: CompletedGame | null;
   currentSold: number;
+  contractId: string | null;
 }
 
 export interface OwnHardware {
@@ -138,7 +139,10 @@ interface ActiveContract {
   target: number;
   progress: number;
   elapsed: number;
+  studioId: number;
 }
+
+export type GameEvent = { type: 'exhibit'; studioId: number };
 
 export const contractCatalog: Contract[] = contractsData.contracts;
 
@@ -152,7 +156,9 @@ const LONG_TAIL_CAP = 1.5; // 累計需要の上限（期待売上の1.5倍）
 const COMPAT: Record<string, number> = { '☆': 1.5, '◎': 1.2, '◯': 1.0, '◇': 0.85, '△': 0.7, '✕': 0.5 };
 const COMPAT_REVIEW: Record<string, number> = { '☆': 4, '◎': 2, '◯': 1, '◇': 0, '△': -2, '✕': -4 };
 const HALL_OF_FAME_SCORE = 32;
-const SAVE_KEY = 'gamedev-sim-save';
+const SAVE_KEY_PREFIX = 'gamedev-sim-save';
+const SAVE_SLOTS = 3;
+const LEGACY_SAVE_KEY = 'gamedev-sim-save';
 const MAX_TENANTS = 3;
 const MAX_STUDIOS = 5;
 const SHIP_CAP_BASE = 500_000;
@@ -206,6 +212,14 @@ function productionCost(hw: ReturnType<typeof findHardware>): number {
   return Math.round(base * (1 - 0.1 * techLevel('compress')));
 }
 
+export function unitCost(hardwareId: string): number {
+  return productionCost(findHardware(hardwareId));
+}
+
+export function freeStudio(): Studio | undefined {
+  return game.studios.find((s) => !s.dev && !s.completed && !s.onSale && !s.contractId);
+}
+
 export function effectiveInstallBase(id: string, year: number): number {
   const hw = findHardware(id);
   if (!hw || hw.installBase == null) return 0;
@@ -247,11 +261,14 @@ const initialState = {
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
   salaryYear: 1,
+  event: null as GameEvent | null,
+  autoExhibit: false,
+  saveSlot: 0,
 };
 
 function initialStudios(): Studio[] {
   return [
-    { id: 1, name: '本社', leadId: null, dev: null, completed: null, inventory: 0, onSale: null, currentSold: 0 }
+    { id: 1, name: '本社', leadId: null, dev: null, completed: null, inventory: 0, onSale: null, currentSold: 0, contractId: null }
   ];
 }
 
@@ -471,7 +488,8 @@ export function foundStudio(name: string, leadId: string) {
     completed: null,
     inventory: 0,
     onSale: null,
-    currentSold: 0
+    currentSold: 0,
+    contractId: null
   });
   game.lastReport = `新スタジオ「${name}」を発足しました（責任者: ${lead.name}）`;
 }
@@ -506,7 +524,8 @@ export function acquireCompany() {
     completed: null,
     inventory: 0,
     onSale: null,
-    currentSold: 0
+    currentSold: 0,
+    contractId: null
   });
   game.fame = Math.min(100, game.fame + 10);
   const n = game.employees.filter((e) => e.id.startsWith('acquired')).length + 1;
@@ -634,7 +653,7 @@ export function portArcade(idx: number) {
     game.lastReport = '移植には稼働率60以上が必要です';
     return;
   }
-  const studio = game.studios.find((s) => !s.dev && !s.completed && !s.onSale);
+  const studio = freeStudio();
   if (!studio) {
     game.lastReport = '空いているスタジオがありません';
     return;
@@ -688,12 +707,13 @@ export function portArcade(idx: number) {
   game.fame = Math.min(100, game.fame + 5);
   if (hallOfFame) game.hallOfFame.push({ ...studio.completed });
   game.lastReport = `アーケード「${ag.name}」を家庭用に移植しました（知名度 +5）`;
+  afterCompleteExhibit(studio);
 }
 
 export function startDev(name: string, genre: string, content: string, hardwareId: string, studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio) return;
-  if (studio.dev || studio.completed) return;
+  if (studio.dev || studio.completed || studio.contractId) return;
   if (game.employees.length === 0) {
     game.lastReport = '社員がいません。先に雇用してください';
     return;
@@ -717,7 +737,7 @@ export function startDev(name: string, genre: string, content: string, hardwareI
 export function startSequel(hof: CompletedGame, studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio) return;
-  if (studio.dev || studio.completed) return;
+  if (studio.dev || studio.completed || studio.contractId) return;
   if (game.employees.length === 0) {
     game.lastReport = '社員がいません。先に雇用してください';
     return;
@@ -741,26 +761,48 @@ export function startSequel(hof: CompletedGame, studioId: number) {
   game.lastReport = `続編「${studio.dev.name}」の開発を開始しました（${studio.name} / 前作の実績を引き継ぎ）`;
 }
 
-export function exhibitGame(studioId: number) {
-  const studio = game.studios.find((s) => s.id === studioId);
-  if (!studio) return;
+const EXHIBIT_FEE = 5_000_000;
+
+function performExhibit(studio: Studio): string | null {
   const target = studio.completed ?? studio.dev;
-  if (!target) return;
-  if (target.exhibited) {
-    game.lastReport = 'この作品はすでに出展済みです';
-    return;
+  if (!target || target.exhibited) return null;
+  if (game.money < EXHIBIT_FEE) {
+    return `出展費用が足りないため出展を見送りました（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
   }
-  const fee = 5_000_000;
-  if (game.money < fee) {
-    game.lastReport = `出展費用が足りません（${fee.toLocaleString()}円 必要）`;
-    return;
-  }
-  game.money -= fee;
+  game.money -= EXHIBIT_FEE;
   let gain = 3;
   if (studio.completed) gain += Math.round(studio.completed.reviewScore / 8);
   game.fame = Math.min(100, game.fame + gain);
   target.exhibited = true;
-  game.lastReport = `ゲームデックスに出展しました（知名度 +${gain}、現在 ${game.fame}）`;
+  return `ゲームデックスに出展しました（知名度 +${gain}、現在 ${game.fame}）`;
+}
+
+export function respondExhibit(studioId: number, doExhibit: boolean) {
+  game.event = null;
+  const studio = game.studios.find((s) => s.id === studioId);
+  if (!studio) return;
+  if (doExhibit) {
+    game.lastReport = performExhibit(studio) ?? '出展を見送りました';
+  } else {
+    game.lastReport = `「${studio.completed?.name ?? studio.dev?.name ?? ''}」のゲームデックス出展を見送りました`;
+  }
+}
+
+export function setAutoExhibit(v: boolean) {
+  game.autoExhibit = v;
+  game.lastReport = v
+    ? 'ゲームデックス自動出展をオンにしました（完成時に自動出展します）'
+    : 'ゲームデックス自動出展をオフにしました';
+}
+
+function afterCompleteExhibit(studio: Studio) {
+  if (!studio.completed || studio.completed.exhibited) return;
+  if (game.autoExhibit) {
+    const msg = performExhibit(studio);
+    if (msg) game.lastReport = msg;
+  } else {
+    game.event = { type: 'exhibit', studioId: studio.id };
+  }
 }
 
 export function ship(quantity: number, studioId: number) {
@@ -832,12 +874,20 @@ export function acceptContract(id: string) {
     game.lastReport = '社員がいません。先に雇用してください';
     return;
   }
-  game.activeContract = { id: c.id, name: c.name, reward: c.reward, deadline: c.deadline, target: c.target, progress: 0, elapsed: 0 };
-  game.lastReport = `受注案件「${c.name}」を受注しました（報酬 ${c.reward.toLocaleString()}円 / 納期 ${c.deadline}週）`;
+  const studio = freeStudio();
+  if (!studio) {
+    game.lastReport = '空いているスタジオがありません';
+    return;
+  }
+  studio.contractId = c.id;
+  game.activeContract = { id: c.id, name: c.name, reward: c.reward, deadline: c.deadline, target: c.target, progress: 0, elapsed: 0, studioId: studio.id };
+  game.lastReport = `受注案件「${c.name}」を受注しました（${studio.name}で開発 / 報酬 ${c.reward.toLocaleString()}円 / 納期 ${c.deadline}週）`;
 }
 
 export function cancelContract() {
   if (!game.activeContract) return;
+  const studio = game.studios.find((s) => s.id === game.activeContract!.studioId);
+  if (studio) studio.contractId = null;
   game.activeContract = null;
   game.lastReport = '受注案件をキャンセルしました';
 }
@@ -901,6 +951,8 @@ function completeDev(studio: Studio) {
 
   if (hallOfFame) game.hallOfFame.push({ ...studio.completed });
   game.yearGames.push({ name: studio.completed.name, reviewScore, graphics, music });
+
+  afterCompleteExhibit(studio);
 }
 
 function holdContest(): string | null {
@@ -1046,14 +1098,17 @@ export function advanceWeek() {
   // 受注開発の進行
   if (game.activeContract) {
     const c = game.activeContract;
+    const studio = game.studios.find((s) => s.id === c.studioId);
     const speed = game.employees.reduce((s, e) => s + e.speed, 0);
-    c.progress += speed / 12;
+    const leadBonus = studio?.leadId ? 1.1 : 1.0;
+    c.progress += (speed / 12) * leadBonus;
     c.elapsed += 1;
     if (c.progress >= c.target) {
       const onTime = c.elapsed <= c.deadline;
       const pay = onTime ? c.reward : Math.round(c.reward * 0.6);
       game.money += pay;
       game.doneContracts.push(c.id);
+      if (studio) studio.contractId = null;
       reports.push(`受注案件「${c.name}」を納品しました（報酬 ${pay.toLocaleString()}円${onTime ? '' : '・納期遅れで減額'}）`);
       game.activeContract = null;
     }
@@ -1143,29 +1198,63 @@ export function advanceWeek() {
   saveGame();
 }
 
-export function saveGame() {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(SAVE_KEY, JSON.stringify($state.snapshot(game)));
+function slotKey(slot: number): string {
+  return `${SAVE_KEY_PREFIX}-${slot}`;
 }
 
-export function loadGame(): boolean {
+export function saveSlots(): number {
+  return SAVE_SLOTS;
+}
+
+export function currentSlot(): number {
+  return game.saveSlot;
+}
+
+export function saveGame(slot?: number) {
+  if (typeof localStorage === 'undefined') return;
+  const s = slot ?? game.saveSlot;
+  game.saveSlot = s;
+  localStorage.setItem(slotKey(s), JSON.stringify($state.snapshot(game)));
+}
+
+export function loadGame(slot?: number): boolean {
   try {
     if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return false;
-    const raw = localStorage.getItem(SAVE_KEY);
+    const s = slot ?? game.saveSlot;
+    let raw = localStorage.getItem(slotKey(s));
+    if (!raw && s === 0) raw = localStorage.getItem(LEGACY_SAVE_KEY);
     if (!raw) return false;
     Object.assign(game, JSON.parse(raw));
+    game.saveSlot = s;
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
+    for (const st of game.studios) if (st.contractId === undefined) st.contractId = null;
+    if (game.event === undefined) game.event = null;
+    if (game.autoExhibit === undefined) game.autoExhibit = false;
     return true;
   } catch {
     return false;
   }
 }
 
+export function peekSlot(slot: number): string {
+  try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return '空き';
+    const raw = localStorage.getItem(slotKey(slot)) ?? (slot === 0 ? localStorage.getItem(LEGACY_SAVE_KEY) : null);
+    if (!raw) return '空き';
+    const d = JSON.parse(raw);
+    const w = d.week ?? 1;
+    const y = START_YEAR + Math.floor((w - 1) / WEEKS_PER_YEAR);
+    const m = Math.floor(((w - 1) % WEEKS_PER_YEAR) / 4) + 1;
+    return `${y}年${m}月 / 資金 ¥${Number(d.money ?? 0).toLocaleString()} / 知名度 ${d.fame ?? 0}`;
+  } catch {
+    return '空き';
+  }
+}
+
 export function resetGame() {
   Object.assign(game, structuredClone(initialState));
   game.studios = initialStudios();
-  if (typeof localStorage !== 'undefined') localStorage.removeItem(SAVE_KEY);
 }
 
-loadGame();
+loadGame(0);

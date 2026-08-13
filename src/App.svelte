@@ -14,12 +14,14 @@
     foundStudio,
     acquireCompany,
     startDev,
-    startSequel,
     ship,
     finishGame,
-    exhibitGame,
     saveGame,
+    loadGame,
     resetGame,
+    saveSlots,
+    currentSlot,
+    peekSlot,
     buyTenant,
     hasTenant,
     shipCap,
@@ -39,11 +41,13 @@
     hwName,
     restock,
     disposeCatalog,
+    unitCost,
     availableContracts,
     acceptContract,
     cancelContract,
-    effectiveInstallBase,
-    compatMark
+    compatMark,
+    respondExhibit,
+    setAutoExhibit
   } from './lib/game.svelte';
   import { hardware, kumiawase, availableGenres, availableContents } from './lib/data';
   import OfficeCanvas from './lib/OfficeCanvas.svelte';
@@ -67,12 +71,16 @@
   const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
   const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
-  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.onSale));
-  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.onSale));
+  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.onSale && !s.contractId));
+  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.onSale || s.contractId));
   const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
 
   // モーダル状態
   let activeTab = $state('');
+
+  $effect(() => {
+    if (game.event) activeTab = '';
+  });
 
   // 新規開発フォーム
   let devName = $state('私のゲーム');
@@ -110,8 +118,9 @@
     if (!arcadeBoards.some((b) => b.id === arcBoard)) arcBoard = arcadeBoards[0]?.id ?? '';
   });
 
-  // 出荷（スタジオごと）
+  // 出荷・再出荷の本数入力
   let shipQtys = $state<Record<number, number>>({});
+  let restockQtys = $state<Record<number, number>>({});
 
   // 自動進行（放置）
   let auto = $state(false);
@@ -146,6 +155,8 @@
 
   const ranking = $derived([...game.catalog].sort((a, b) => b.soldTotal - a.soldTotal));
 
+  const exhibitEvent = $derived(game.event?.type === 'exhibit' ? game.event : null);
+
   const achievements = $derived([
     { label: '累計販売10万本', done: game.totalSales >= 100000 },
     { label: '累計販売100万本', done: game.totalSales >= 1000000 },
@@ -179,14 +190,61 @@
           <option value={5}>5x</option>
         </select>
       {/if}
-      <button onclick={saveGame}>セーブ</button>
+      <button onclick={() => (activeTab = 'save')}>セーブ/ロード</button>
       <button onclick={resetGame}>リセット</button>
+      <label class="toggle">
+        <input type="checkbox" checked={game.autoExhibit} onchange={(e) => setAutoExhibit(e.currentTarget.checked)} />
+        デックス自動出展
+      </label>
     </div>
     <p class="report">{game.lastReport}</p>
     {#if game.gameOver}
       <p class="gameover">破産しました（ゲームオーバー）</p>
     {/if}
   </header>
+
+  <section class="progress">
+    <h2>進捗</h2>
+    {#each game.studios.filter((s) => s.dev) as s (s.id)}
+      <div class="prow">
+        <span class="plabel">{s.name}: 「{s.dev!.name}」{s.dev!.stage}</span>
+        {#if s.dev!.stage === '開発'}
+          <progress value={Math.min(100, s.dev!.progress / 2)} max={100}></progress>
+          <span class="pct">{Math.floor(Math.min(100, s.dev!.progress / 2))}%</span>
+        {:else}
+          <span class="pnote">バグ {Math.floor(s.dev!.bug)}</span>
+        {/if}
+      </div>
+    {/each}
+    {#if game.activeContract}
+      <div class="prow">
+        <span class="plabel">受注: 「{game.activeContract.name}」</span>
+        <progress value={Math.min(100, (game.activeContract.progress / game.activeContract.target) * 100)} max={100}></progress>
+        <span class="pct">{Math.floor(Math.min(100, (game.activeContract.progress / game.activeContract.target) * 100))}%</span>
+      </div>
+    {/if}
+    {#if game.hwProject}
+      <div class="prow">
+        <span class="plabel">自社ハード: 「{game.hwProject.name}」</span>
+        <progress value={Math.min(100, (game.hwProject.progress / game.hwProject.target) * 100)} max={100}></progress>
+        <span class="pct">{Math.floor(Math.min(100, (game.hwProject.progress / game.hwProject.target) * 100))}%</span>
+      </div>
+    {/if}
+    {#if game.arcadeProject}
+      <div class="prow">
+        <span class="plabel">アーケード: 「{game.arcadeProject.name}」{game.arcadeProject.stage}</span>
+        {#if game.arcadeProject.stage === '開発'}
+          <progress value={Math.min(100, game.arcadeProject.progress / 1.2)} max={100}></progress>
+          <span class="pct">{Math.floor(Math.min(100, game.arcadeProject.progress / 1.2))}%</span>
+        {:else}
+          <span class="pnote">バグ {Math.floor(game.arcadeProject.bug)}</span>
+        {/if}
+      </div>
+    {/if}
+    {#if game.studios.filter((s) => s.dev).length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
+      <p class="pnote">進行中の開発はありません</p>
+    {/if}
+  </section>
 
   <section>
     <h2>オフィス</h2>
@@ -199,7 +257,7 @@
     <button onclick={() => (activeTab = 'studio')}>スタジオ（{game.studios.length}）</button>
     <button onclick={() => (activeTab = 'contract')}>受注</button>
     <button onclick={() => (activeTab = 'arcade')}>アーケード</button>
-    <button onclick={() => (activeTab = 'hw')}>自社ハード</button>
+    <button onclick={() => (activeTab = 'hw')}>ハード</button>
     <button onclick={() => (activeTab = 'manage')}>経営</button>
     <button onclick={() => (activeTab = 'catalog')}>カタログ（{game.catalog.length}）</button>
     <button onclick={() => (activeTab = 'ach')}>実績</button>
@@ -215,15 +273,9 @@
               <p>開発中: 「{s.dev.name}」({s.dev.genre} × {s.dev.content} / {hwName(s.dev.hardwareId)})</p>
               <progress value={Math.min(100, s.dev.progress / 2)} max={100}></progress>
               <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
-              <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
-                {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
-              </button>
             {:else}
               <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
               <button onclick={() => finishGame(s.id)}>完成する</button>
-              <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
-                {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
-              </button>
             {/if}
           {:else if s.completed}
             <p>完成: 「{s.completed.name}」 レビュー {s.completed.reviewScore}点
@@ -237,16 +289,19 @@
             <div class="ship">
               <label>
                 出荷本数（上限 {shipCap().toLocaleString()}本）:
-                <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed.expectedSales, shipCap()))} />
+                <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed!.expectedSales, shipCap()))} />
               </label>
+              <span>1本あたり生産費 ¥{unitCost(s.completed!.hardwareId).toLocaleString()}</span>
+              {#if shipQtys[s.id] > 0}
+                <span>計 ¥{(unitCost(s.completed!.hardwareId) * shipQtys[s.id]).toLocaleString()}</span>
+              {/if}
               <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id)}>出荷する</button>
               <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
             </div>
-            <button onclick={() => exhibitGame(s.id)} disabled={s.completed.exhibited}>
-              {s.completed.exhibited ? '出展済み' : 'ゲームデックスに出展'}
-            </button>
           {:else if s.onSale}
             <p>販売中: 「{s.onSale.name}」在庫 {s.inventory.toLocaleString()}本（{s.onSale.weeksOnSale}週目）</p>
+          {:else if s.contractId}
+            <p>受注案件を開発中</p>
           {:else}
             <p>空き（開発待ち）</p>
           {/if}
@@ -469,7 +524,28 @@
   {/if}
 
   {#if activeTab === 'hw'}
-    <Modal title="自社ハード" onclose={() => (activeTab = '')}>
+    <Modal title="ハード" onclose={() => (activeTab = '')}>
+      <h3>ライセンス取得（他社ハード）</h3>
+      {#if unlicensedHardware.length === 0}
+        <p>取得可能なライセンスはありません。</p>
+      {:else}
+        <table>
+          <thead>
+            <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
+          </thead>
+          <tbody>
+            {#each unlicensedHardware as h}
+              <tr>
+                <td>{h.name}（{h.realName}）</td>
+                <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
+                <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+
+      <h3>自社ハード開発</h3>
       {#if canDevelopHardware()}
         {#if game.hwProject}
           <p>
@@ -509,7 +585,7 @@
   {/if}
 
   {#if activeTab === 'manage'}
-    <Modal title="経営（施設・技術・ライセンス）" onclose={() => (activeTab = '')}>
+    <Modal title="経営（施設・技術）" onclose={() => (activeTab = '')}>
       <h3>テナント（{game.tenants.length}/3）</h3>
       <table>
         <thead>
@@ -561,26 +637,6 @@
           {/each}
         </tbody>
       </table>
-
-      <h3>ライセンス取得</h3>
-      {#if unlicensedHardware.length === 0}
-        <p>取得可能なライセンスはありません。</p>
-      {:else}
-        <table>
-          <thead>
-            <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each unlicensedHardware as h}
-              <tr>
-                <td>{h.name}（{h.realName}）</td>
-                <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
-                <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
     </Modal>
   {/if}
 
@@ -589,7 +645,7 @@
       <h3>継続販売中の作品</h3>
       <table>
         <thead>
-          <tr><th>タイトル</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th></th></tr>
+          <tr><th>タイトル</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th>1本生産費</th><th>操作</th></tr>
         </thead>
         <tbody>
           {#each game.catalog as g, i (g.name)}
@@ -598,8 +654,10 @@
               <td>{g.inventory.toLocaleString()}本</td>
               <td>{g.soldTotal.toLocaleString()}本</td>
               <td>{g.reviewScore}点</td>
+              <td>¥{unitCost(g.hardwareId).toLocaleString()}</td>
               <td>
-                <button onclick={() => restock(i, Math.min(g.expectedSales * 0.2, shipCap()))}>再出荷</button>
+                <input class="qty" type="number" bind:value={restockQtys[i]} min="0" placeholder={String(Math.floor(Math.min(g.expectedSales * 0.2, shipCap())))} />
+                <button onclick={() => restock(i, restockQtys[i] || 0)} disabled={!(restockQtys[i] > 0)}>再出荷</button>
                 {#if g.inventory > 0}
                   <button onclick={() => disposeCatalog(i)}>処分</button>
                 {/if}
@@ -641,6 +699,39 @@
       </ul>
     </Modal>
   {/if}
+
+  {#if activeTab === 'save'}
+    <Modal title="セーブ / ロード" onclose={() => (activeTab = '')}>
+      <p>現在のスロット: スロット{currentSlot() + 1}（自動セーブはこのスロットへ）</p>
+      <table>
+        <thead>
+          <tr><th>スロット</th><th>内容</th><th></th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each Array(saveSlots()) as _, i}
+            <tr>
+              <td>スロット{i + 1}{i === currentSlot() ? '（現在）' : ''}</td>
+              <td>{peekSlot(i)}</td>
+              <td><button onclick={() => saveGame(i)}>セーブ</button></td>
+              <td><button onclick={() => { loadGame(i); activeTab = ''; }} disabled={peekSlot(i) === '空き'}>ロード</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </Modal>
+  {/if}
+
+  {#if exhibitEvent}
+    <Modal title="ゲームデックス出展" onclose={() => respondExhibit(exhibitEvent.studioId, false)}>
+      {@const studio = game.studios.find((s) => s.id === exhibitEvent.studioId)}
+      <p>
+        「{studio?.completed?.name ?? studio?.dev?.name ?? ''}」が完成しました！
+        ゲームデックスに出展して知名度を上げますか？（出展費 {(5000000).toLocaleString()}円）
+      </p>
+      <button onclick={() => respondExhibit(exhibitEvent.studioId, true)}>出展する</button>
+      <button onclick={() => respondExhibit(exhibitEvent.studioId, false)}>見送る</button>
+    </Modal>
+  {/if}
 </main>
 
 <style>
@@ -650,6 +741,9 @@
     margin: 0;
     padding: 16px;
     color: #222;
+  }
+  main {
+    padding-bottom: 96px;
   }
   h1 {
     font-size: 1.3rem;
@@ -678,10 +772,16 @@
   }
   .controls {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
     margin: 8px 0;
     flex-wrap: wrap;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
   }
   .gameover {
     color: #c00;
@@ -692,15 +792,29 @@
     font-size: 0.9rem;
   }
   .ribbon {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    margin: 12px 0;
+    justify-content: center;
+    background: #2b2b2b;
+    padding: 8px;
+    z-index: 5;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.35);
   }
   .ribbon button {
-    font-size: 0.95rem;
+    background: #fff;
+    border: 1px solid #999;
+    border-radius: 4px;
     padding: 8px 14px;
     cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .ribbon button:hover {
+    background: #e8f0ff;
   }
   section {
     background: #fff;
@@ -708,6 +822,29 @@
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 12px;
+  }
+  .progress .prow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0;
+  }
+  .plabel {
+    min-width: 220px;
+    font-size: 0.9rem;
+  }
+  .prow progress {
+    flex: 1;
+  }
+  .pct {
+    font-size: 0.85rem;
+    color: #555;
+    min-width: 40px;
+    text-align: right;
+  }
+  .pnote {
+    color: #888;
+    font-size: 0.85rem;
   }
   .studio {
     border: 1px solid #ccc;
@@ -755,6 +892,9 @@
     align-items: center;
     flex-wrap: wrap;
     margin: 6px 0;
+  }
+  .qty {
+    width: 90px;
   }
   .hw {
     font-size: 0.85rem;
