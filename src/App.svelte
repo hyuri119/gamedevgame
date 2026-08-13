@@ -15,6 +15,10 @@
     exhibitGame,
     saveGame,
     resetGame,
+    buyTenant,
+    hasTenant,
+    shipCap,
+    tenantCatalog,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -179,11 +183,11 @@
       </ul>
       <div class="ship">
         <label>
-          出荷本数:
-          <input type="number" bind:value={shipQty} min="0" placeholder={String(game.completed.expectedSales)} />
+          出荷本数（上限 {shipCap().toLocaleString()}本）:
+          <input type="number" bind:value={shipQty} min="0" placeholder={String(Math.min(game.completed.expectedSales, shipCap()))} />
         </label>
         <button onclick={onShip}>出荷する</button>
-        <button onclick={() => (shipQty = game.completed!.expectedSales)}>期待売上分</button>
+        <button onclick={() => (shipQty = Math.min(game.completed!.expectedSales, shipCap()))}>期待売上分</button>
       </div>
     {:else if game.onSale}
       <p>販売中: 「{game.onSale.name}」在庫 {game.inventory.toLocaleString()}本（{game.onSale.weeksOnSale}週目）</p>
@@ -233,6 +237,31 @@
       </table>
     </section>
   {/if}
+
+  <section>
+    <h2>テナント（{game.tenants.length}/3）</h2>
+    <table>
+      <thead>
+        <tr><th>施設</th><th>効果</th><th>費用</th><th></th></tr>
+      </thead>
+      <tbody>
+        {#each tenantCatalog as t (t.id)}
+          <tr>
+            <td>{t.name}</td>
+            <td>{t.effect}</td>
+            <td>{(t.cost / 10000).toLocaleString()}万</td>
+            <td>
+              {#if hasTenant(t.id)}
+                導入済み
+              {:else}
+                <button onclick={() => buyTenant(t.id)} disabled={game.tenants.length >= 3}>導入</button>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
 
   <section>
     <h2>参入可能ハード（{currentYear()}年）</h2>

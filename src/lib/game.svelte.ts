@@ -1,5 +1,6 @@
 import { hardware, kumiawase } from './data';
 import employeesData from '../../data/employees.json';
+import tenantsData from '../../data/tenants.json';
 
 export interface Employee {
   id: string;
@@ -57,8 +58,19 @@ const COMPAT: Record<string, number> = { '☆': 1.5, '◎': 1.2, '◯': 1.0, '�
 const COMPAT_REVIEW: Record<string, number> = { '☆': 4, '◎': 2, '◯': 1, '◇': 0, '△': -2, '✕': -4 };
 const HALL_OF_FAME_SCORE = 32;
 const SAVE_KEY = 'gamedev-sim-save';
+const MAX_TENANTS = 3;
+const SHIP_CAP_BASE = 500_000;
+const SHIP_CAP_FACTORY = 2_000_000;
 
 export const employeePool: Employee[] = employeesData.employees;
+
+export interface Tenant {
+  id: string;
+  name: string;
+  effect: string;
+  cost: number;
+}
+export const tenantCatalog: Tenant[] = tenantsData.tenants;
 
 function findHardware(id: string) {
   return hardware.hardware.find((h) => h.id === id);
@@ -103,6 +115,9 @@ const initialState = {
   hallOfFame: [] as CompletedGame[],
   totalSales: 0, // 累計販売本数
   fame: 0, // 知名度 0〜100
+  tenants: [] as string[],
+  yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
+  contestYear: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
   salaryYear: 0,
@@ -120,6 +135,35 @@ export function month(): number {
 
 export function currentYear(): number {
   return START_YEAR + year() - 1;
+}
+
+export function hasTenant(id: string): boolean {
+  return game.tenants.includes(id);
+}
+
+export function buyTenant(id: string) {
+  const t = tenantCatalog.find((x) => x.id === id);
+  if (!t) return;
+  if (hasTenant(id)) return;
+  if (game.tenants.length >= MAX_TENANTS) {
+    game.lastReport = 'テナントは最大3つまでです';
+    return;
+  }
+  if (game.money < t.cost) {
+    game.lastReport = `建設費用が足りません（${t.name} は ${t.cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= t.cost;
+  game.tenants.push(id);
+  game.lastReport = `${t.name} を導入しました（${t.effect}）`;
+}
+
+export function shipCap(): number {
+  return hasTenant('factory') ? SHIP_CAP_FACTORY : SHIP_CAP_BASE;
+}
+
+function licenseFeeMultiplier(): number {
+  return hasTenant('lawyer') ? 0.7 : 1.0;
 }
 
 export function hire(id: string) {
@@ -210,7 +254,7 @@ export function exhibitGame() {
 
 export function ship(quantity: number) {
   if (!game.completed) return;
-  const q = Math.floor(quantity);
+  const q = Math.min(Math.floor(quantity), shipCap());
   const hw = findHardware(game.completed.hardwareId);
   const cost = productionCost(hw) * q;
   if (q <= 0) {
@@ -283,13 +327,62 @@ function completeDev() {
     hallOfFame,
     expectedSales,
     price: 5800,
-    licenseFee: hw.licenseFee ?? 0,
+    licenseFee: Math.round((hw.licenseFee ?? 0) * licenseFeeMultiplier()),
     weeksOnSale: 0,
     exhibited: d.exhibited
   };
   game.dev = null;
 
   if (hallOfFame) game.hallOfFame.push({ ...game.completed });
+  game.yearGames.push({ name: game.completed.name, reviewScore, graphics, music });
+}
+
+// 全日本ゲームコンテスト（年1回、12月開催）
+function holdContest(): string | null {
+  const entries = game.yearGames;
+  game.yearGames = [];
+  if (entries.length === 0) return null;
+
+  const best = entries.reduce((a, b) => (a.reviewScore >= b.reviewScore ? a : b));
+  const worst = entries.reduce((a, b) => (a.reviewScore <= b.reviewScore ? a : b));
+  const gfx = entries.reduce((a, b) => (a.graphics >= b.graphics ? a : b));
+  const mus = entries.reduce((a, b) => (a.music >= b.music ? a : b));
+
+  const msgs: string[] = [];
+  let fame = 0;
+  let prize = 0;
+
+  if (best.reviewScore >= 36) {
+    fame += 15;
+    prize += 50_000_000;
+    msgs.push(`全日本ゲームコンテスト: 「${best.name}」がグランプリ受賞！`);
+  } else if (best.reviewScore >= 30) {
+    fame += 8;
+    prize += 20_000_000;
+    msgs.push(`全日本ゲームコンテスト: 「${best.name}」が準グランプリ受賞！`);
+  } else {
+    msgs.push('全日本ゲームコンテスト: 受賞なし');
+  }
+
+  if (gfx.graphics >= 70 && gfx !== best) {
+    fame += 5;
+    prize += 5_000_000;
+    msgs.push(`「${gfx.name}」がデザイン賞受賞！`);
+  }
+  if (mus.music >= 70 && mus !== best) {
+    fame += 5;
+    prize += 5_000_000;
+    msgs.push(`「${mus.name}」が音楽賞受賞！`);
+  }
+  if (worst.reviewScore < 10) {
+    fame += 2;
+    msgs.push(`「${worst.name}」がクソゲー賞受賞…`);
+  }
+
+  game.fame = Math.min(100, game.fame + fame);
+  game.money += prize;
+  if (prize > 0) msgs.push(`賞金 +${prize.toLocaleString()}円`);
+  return msgs.join(' / ');
 }
 
 export function advanceWeek() {
@@ -329,7 +422,13 @@ export function advanceWeek() {
     }
     if (w >= 6 || game.inventory === 0) {
       if (game.inventory > 0) {
-        reports.push(`「${game.onSale.name}」の売れ残り ${game.inventory.toLocaleString()}本を処分`);
+        if (hasTenant('recycle')) {
+          const refund = game.inventory * 500;
+          game.money += refund;
+          reports.push(`「${game.onSale.name}」の売れ残り ${game.inventory.toLocaleString()}本をリサイクル回収（+${refund.toLocaleString()}円）`);
+        } else {
+          reports.push(`「${game.onSale.name}」の売れ残り ${game.inventory.toLocaleString()}本を処分`);
+        }
       }
       game.inventory = 0;
       game.onSale = null;
@@ -350,6 +449,13 @@ export function advanceWeek() {
   if (Math.random() < 0.06 && game.fame < 100) {
     game.fame = Math.min(100, game.fame + 2);
     reports.push('雑誌社から取材が来ました（知名度 +2）');
+  }
+
+  // 年1回のコンテスト（12月）
+  if (month() === 12 && game.contestYear !== year()) {
+    game.contestYear = year();
+    const result = holdContest();
+    if (result) reports.push(result);
   }
 
   if (game.money < 0) {
