@@ -7,7 +7,8 @@
 - `npm install` — 依存導入（初回のみ）
 - `npm run dev` — 開発サーバ（http://localhost:5173）
 - `npm run build` — 本番ビルド（`dist/` に出力）
-- lint / typecheck / test は未設定。必要になったら追加する
+- `npm run check` — 型チェック（svelte-check）。undefined アクセス等の見落としを検出するので、変更後は必ず実行
+- lint / test は未設定。必要になったら追加する
 
 ## 構成
 
