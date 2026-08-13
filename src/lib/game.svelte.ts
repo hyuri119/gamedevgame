@@ -119,6 +119,7 @@ export interface CatalogGame {
   licenseFee: number;
   inventory: number;
   soldTotal: number;
+  exhibited: boolean;
 }
 
 export interface Contract {
@@ -142,7 +143,7 @@ interface ActiveContract {
   studioId: number;
 }
 
-export type GameEvent = { type: 'exhibit'; studioId: number };
+export type GameEvent = { type: 'decks' };
 
 export const contractCatalog: Contract[] = contractsData.contracts;
 
@@ -263,6 +264,7 @@ const initialState = {
   salaryYear: 1,
   event: null as GameEvent | null,
   autoExhibit: false,
+  exhibitYear: 0,
   saveSlot: 0,
 };
 
@@ -318,11 +320,14 @@ export function shipCap(): number {
 export function licenseCost(id: string): number {
   const hw = findHardware(id);
   if (!hw || hw.installBase == null) return 0;
+  if (hw.type === 'pc') return 0;
   return Math.round(hw.installBase * 2);
 }
 
 export function hasLicense(id: string): boolean {
   if (game.ownHardware.some((h) => h.id === id)) return true;
+  const hw = findHardware(id);
+  if (hw?.type === 'pc') return true;
   return game.licenses.includes(id);
 }
 
@@ -707,7 +712,6 @@ export function portArcade(idx: number) {
   game.fame = Math.min(100, game.fame + 5);
   if (hallOfFame) game.hallOfFame.push({ ...studio.completed });
   game.lastReport = `アーケード「${ag.name}」を家庭用に移植しました（知名度 +5）`;
-  afterCompleteExhibit(studio);
 }
 
 export function startDev(name: string, genre: string, content: string, hardwareId: string, studioId: number) {
@@ -766,43 +770,54 @@ const EXHIBIT_FEE = 5_000_000;
 function performExhibit(studio: Studio): string | null {
   const target = studio.completed ?? studio.dev;
   if (!target || target.exhibited) return null;
-  if (game.money < EXHIBIT_FEE) {
-    return `出展費用が足りないため出展を見送りました（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
-  }
+  if (game.money < EXHIBIT_FEE) return null;
   game.money -= EXHIBIT_FEE;
   let gain = 3;
   if (studio.completed) gain += Math.round(studio.completed.reviewScore / 8);
   game.fame = Math.min(100, game.fame + gain);
   target.exhibited = true;
-  return `ゲームデックスに出展しました（知名度 +${gain}、現在 ${game.fame}）`;
+  return `「${target.name}」をゲームデックスに出展しました（知名度 +${gain}）`;
 }
 
-export function respondExhibit(studioId: number, doExhibit: boolean) {
-  game.event = null;
+function performCatalogExhibit(g: CatalogGame): string | null {
+  if (g.exhibited) return null;
+  if (game.money < EXHIBIT_FEE) return null;
+  game.money -= EXHIBIT_FEE;
+  const gain = 2 + Math.round(g.reviewScore / 10);
+  game.fame = Math.min(100, game.fame + gain);
+  g.exhibited = true;
+  return `「${g.name}」をゲームデックスに出展しました（知名度 +${gain}）`;
+}
+
+export function exhibitStudio(studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio) return;
-  if (doExhibit) {
-    game.lastReport = performExhibit(studio) ?? '出展を見送りました';
-  } else {
-    game.lastReport = `「${studio.completed?.name ?? studio.dev?.name ?? ''}」のゲームデックス出展を見送りました`;
+  if (game.money < EXHIBIT_FEE) {
+    game.lastReport = `出展費用が足りません（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
+    return;
   }
+  game.lastReport = performExhibit(studio) ?? '出展できる作品がありません';
+}
+
+export function exhibitCatalog(idx: number) {
+  const g = game.catalog[idx];
+  if (!g) return;
+  if (game.money < EXHIBIT_FEE) {
+    game.lastReport = `出展費用が足りません（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.lastReport = performCatalogExhibit(g) ?? '出展できる作品がありません';
+}
+
+export function closeDecks() {
+  game.event = null;
 }
 
 export function setAutoExhibit(v: boolean) {
   game.autoExhibit = v;
   game.lastReport = v
-    ? 'ゲームデックス自動出展をオンにしました（完成時に自動出展します）'
+    ? 'ゲームデックス自動出展をオンにしました（9月に自動で出展します）'
     : 'ゲームデックス自動出展をオフにしました';
-}
-
-function afterCompleteExhibit(studio: Studio) {
-  if (!studio.completed || studio.completed.exhibited) return;
-  if (game.autoExhibit) {
-    const msg = performExhibit(studio);
-    if (msg) game.lastReport = msg;
-  } else {
-    game.event = { type: 'exhibit', studioId: studio.id };
-  }
 }
 
 export function ship(quantity: number, studioId: number) {
@@ -951,8 +966,6 @@ function completeDev(studio: Studio) {
 
   if (hallOfFame) game.hallOfFame.push({ ...studio.completed });
   game.yearGames.push({ name: studio.completed.name, reviewScore, graphics, music });
-
-  afterCompleteExhibit(studio);
 }
 
 function holdContest(): string | null {
@@ -1020,11 +1033,15 @@ export function advanceWeek() {
         d.bug += Math.random() * 1.5;
         if (d.progress >= DEV_TARGET) {
           d.stage = 'バグ取り';
-          reports.push(`「${d.name}」の開発が完了しました。バグ取りをして完成させましょう（バグ ${Math.floor(d.bug)}）`);
+          reports.push(`「${d.name}」の開発が完了しました。バグ取りを開始します（バグ ${Math.floor(d.bug)}）`);
         }
       } else {
         const fixSpeed = 1 + 0.5 * techLevel('bug_analysis');
         d.bug = Math.max(0, d.bug - (speed / 12) * 0.6 * fixSpeed);
+        if (d.bug <= 0) {
+          completeDev(studio);
+          reports.push(`「${studio.completed!.name}」が完成しました！レビュー ${studio.completed!.reviewScore}点`);
+        }
       }
     }
 
@@ -1056,7 +1073,8 @@ export function advanceWeek() {
           price: studio.onSale.price,
           licenseFee: studio.onSale.licenseFee,
           inventory: studio.inventory,
-          soldTotal: studio.currentSold
+          soldTotal: studio.currentSold,
+          exhibited: studio.onSale.exhibited
         });
         studio.inventory = 0;
         studio.onSale = null;
@@ -1182,6 +1200,28 @@ export function advanceWeek() {
     reports.push(`大手企業が当社の買収を仕掛けてきました！防衛に奔走（防衛費 ${defense.toLocaleString()}円）`);
   }
 
+  // 年1回のゲームデックス（9月）
+  if (month() === 9 && game.exhibitYear !== year()) {
+    game.exhibitYear = year();
+    const hasCandidate =
+      game.studios.some((s) => (s.dev && !s.dev.exhibited) || (s.completed && !s.completed.exhibited)) ||
+      game.catalog.some((g) => !g.exhibited);
+    if (game.autoExhibit) {
+      const msgs: string[] = [];
+      for (const s of game.studios) {
+        const m = performExhibit(s);
+        if (m) msgs.push(m);
+      }
+      for (const g of game.catalog) {
+        const m = performCatalogExhibit(g);
+        if (m) msgs.push(m);
+      }
+      if (msgs.length > 0) reports.push('ゲームデックス（9月）: ' + msgs.join(' / '));
+    } else if (hasCandidate) {
+      game.event = { type: 'decks' };
+    }
+  }
+
   // 年1回のコンテスト（12月）
   if (month() === 12 && game.contestYear !== year()) {
     game.contestYear = year();
@@ -1229,8 +1269,10 @@ export function loadGame(slot?: number): boolean {
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
     for (const st of game.studios) if (st.contractId === undefined) st.contractId = null;
+    for (const g of game.catalog) if (g.exhibited === undefined) g.exhibited = false;
     if (game.event === undefined) game.event = null;
     if (game.autoExhibit === undefined) game.autoExhibit = false;
+    if (game.exhibitYear === undefined) game.exhibitYear = 0;
     return true;
   } catch {
     return false;

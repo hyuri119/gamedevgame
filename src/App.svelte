@@ -46,7 +46,9 @@
     acceptContract,
     cancelContract,
     compatMark,
-    respondExhibit,
+    exhibitStudio,
+    exhibitCatalog,
+    closeDecks,
     setAutoExhibit
   } from './lib/game.svelte';
   import { hardware, kumiawase, availableGenres, availableContents } from './lib/data';
@@ -155,7 +157,16 @@
 
   const ranking = $derived([...game.catalog].sort((a, b) => b.soldTotal - a.soldTotal));
 
-  const exhibitEvent = $derived(game.event?.type === 'exhibit' ? game.event : null);
+  const decksEvent = $derived(game.event?.type === 'decks' ? game.event : null);
+
+  const deckPreRelease = $derived(
+    game.studios.filter((s) => (s.dev && !s.dev.exhibited) || (s.completed && !s.completed.exhibited))
+  );
+  const deckCatalog = $derived(
+    game.catalog.map((g, i) => ({ g, i })).filter((x) => !x.g.exhibited)
+  );
+
+  const bugCleared = (bug: number) => Math.max(0, Math.min(100, 100 - (bug / 30) * 100));
 
   const achievements = $derived([
     { label: '累計販売10万本', done: game.totalSales >= 100000 },
@@ -212,6 +223,7 @@
           <progress value={Math.min(100, s.dev!.progress / 2)} max={100}></progress>
           <span class="pct">{Math.floor(Math.min(100, s.dev!.progress / 2))}%</span>
         {:else}
+          <progress value={bugCleared(s.dev!.bug)} max={100}></progress>
           <span class="pnote">バグ {Math.floor(s.dev!.bug)}</span>
         {/if}
       </div>
@@ -237,12 +249,22 @@
           <progress value={Math.min(100, game.arcadeProject.progress / 1.2)} max={100}></progress>
           <span class="pct">{Math.floor(Math.min(100, game.arcadeProject.progress / 1.2))}%</span>
         {:else}
+          <progress value={bugCleared(game.arcadeProject.bug)} max={100}></progress>
           <span class="pnote">バグ {Math.floor(game.arcadeProject.bug)}</span>
         {/if}
       </div>
     {/if}
-    {#if game.studios.filter((s) => s.dev).length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
-      <p class="pnote">進行中の開発はありません</p>
+    {#each game.studios.filter((s) => s.completed) as s (s.id)}
+      <div class="prow">
+        <span class="plabel">{s.name}: 「{s.completed!.name}」完成（レビュー {s.completed!.reviewScore}点）</span>
+        <button onclick={() => ship(Math.min(s.completed!.expectedSales, shipCap()), s.id)}>
+          出荷（{Math.min(s.completed!.expectedSales, shipCap()).toLocaleString()}本）
+        </button>
+        <button onclick={() => (activeTab = 'dev')}>詳細</button>
+      </div>
+    {/each}
+    {#if game.studios.filter((s) => s.dev).length === 0 && game.studios.filter((s) => s.completed).length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
+      <p class="pnote">進行中の開発・出荷待ちの作品はありません</p>
     {/if}
   </section>
 
@@ -275,6 +297,7 @@
               <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
             {:else}
               <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
+              <progress value={bugCleared(s.dev.bug)} max={100}></progress>
               <button onclick={() => finishGame(s.id)}>完成する</button>
             {/if}
           {:else if s.completed}
@@ -470,6 +493,7 @@
           <p>進捗 {Math.min(100, Math.floor(game.arcadeProject.progress / 1.2))}% / バグ {Math.floor(game.arcadeProject.bug)}</p>
         {:else}
           <p>バグ取り中: 「{game.arcadeProject.name}」 バグ {Math.floor(game.arcadeProject.bug)}</p>
+          <progress value={bugCleared(game.arcadeProject.bug)} max={100}></progress>
           <button onclick={finishArcade}>完成する</button>
         {/if}
       {:else}
@@ -721,15 +745,28 @@
     </Modal>
   {/if}
 
-  {#if exhibitEvent}
-    <Modal title="ゲームデックス出展" onclose={() => respondExhibit(exhibitEvent.studioId, false)}>
-      {@const studio = game.studios.find((s) => s.id === exhibitEvent.studioId)}
-      <p>
-        「{studio?.completed?.name ?? studio?.dev?.name ?? ''}」が完成しました！
-        ゲームデックスに出展して知名度を上げますか？（出展費 {(5000000).toLocaleString()}円）
-      </p>
-      <button onclick={() => respondExhibit(exhibitEvent.studioId, true)}>出展する</button>
-      <button onclick={() => respondExhibit(exhibitEvent.studioId, false)}>見送る</button>
+  {#if decksEvent}
+    <Modal title="ゲームデックス（9月）" onclose={closeDecks}>
+      <p>出展する作品を選んでください（1作品につき出展費 {(5000000).toLocaleString()}円・知名度アップ）。</p>
+      <h3>発売前の作品</h3>
+      {#each deckPreRelease as s (s.id)}
+        <div class="prow">
+          <span class="plabel">{s.name}: 「{s.dev?.name ?? s.completed?.name}」{s.dev ? '（開発中）' : `（完成・レビュー ${s.completed!.reviewScore}点）`}</span>
+          <button onclick={() => exhibitStudio(s.id)}>出展</button>
+        </div>
+      {:else}
+        <p class="pnote">出展できる発売前の作品はありません。</p>
+      {/each}
+      <h3>カタログ（発売済み）</h3>
+      {#each deckCatalog as x (x.g.name)}
+        <div class="prow">
+          <span class="plabel">「{x.g.name}」（レビュー {x.g.reviewScore}点）</span>
+          <button onclick={() => exhibitCatalog(x.i)}>出展</button>
+        </div>
+      {:else}
+        <p class="pnote">出展できるカタログ作品はありません。</p>
+      {/each}
+      <button onclick={closeDecks}>閉じる</button>
     </Modal>
   {/if}
 </main>
