@@ -4,6 +4,7 @@ import tenantsData from '../../data/tenants.json';
 import technologiesData from '../../data/technologies.json';
 import rolesData from '../../data/roles.json';
 import contractsData from '../../data/contracts.json';
+import storesData from '../../data/stores.json';
 
 export interface Employee {
   id: string;
@@ -46,6 +47,7 @@ export interface CompletedGame {
   expectedSales: number;
   price: number;
   licenseFee: number;
+  storeFee: number;
   weeksOnSale: number;
   exhibited: boolean;
 }
@@ -117,6 +119,7 @@ export interface CatalogGame {
   expectedSales: number;
   price: number;
   licenseFee: number;
+  storeFee: number;
   inventory: number;
   soldTotal: number;
   exhibited: boolean;
@@ -146,6 +149,17 @@ interface ActiveContract {
 export type GameEvent = { type: 'decks' };
 
 export const contractCatalog: Contract[] = contractsData.contracts;
+
+export interface Store {
+  id: string;
+  name: string;
+  realName: string;
+  releaseYear: number;
+  commission: number;
+  reachMul: number;
+  desc: string;
+}
+export const storeCatalog: Store[] = storesData.stores;
 
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
@@ -215,6 +229,17 @@ function productionCost(hw: ReturnType<typeof findHardware>): number {
 
 export function unitCost(hardwareId: string): number {
   return productionCost(findHardware(hardwareId));
+}
+
+export function supportsDl(hardwareId: string): boolean {
+  const hw = findHardware(hardwareId);
+  if (!hw) return false;
+  return hw.type === 'pc' || (hw.media ?? []).includes('ダウンロード');
+}
+
+export function availableStores(hardwareId: string): Store[] {
+  if (!supportsDl(hardwareId)) return [];
+  return storeCatalog.filter((s) => s.releaseYear <= currentYear());
 }
 
 export function freeStudio(): Studio | undefined {
@@ -705,6 +730,7 @@ export function portArcade(idx: number) {
     expectedSales,
     price: 5800,
     licenseFee: Math.round((hw.licenseFee ?? 0) * licenseFeeMultiplier()),
+    storeFee: 0,
     weeksOnSale: 0,
     exhibited: false
   };
@@ -816,16 +842,19 @@ export function closeDecks() {
 export function setAutoExhibit(v: boolean) {
   game.autoExhibit = v;
   game.lastReport = v
-    ? 'ゲームデックス自動出展をオンにしました（9月に自動で出展します）'
+    ? 'ゲームデックス自動出展をオンにしました（9月に開発中の作品を自動出展）'
     : 'ゲームデックス自動出展をオフにしました';
 }
 
-export function ship(quantity: number, studioId: number) {
+export function ship(quantity: number, studioId: number, storeId?: string) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio || !studio.completed) return;
   const q = Math.min(Math.floor(quantity), shipCap());
   const hw = findHardware(studio.completed.hardwareId);
-  const cost = productionCost(hw) * q;
+  const store = storeId ? storeCatalog.find((s) => s.id === storeId) : undefined;
+  const useDl = !!store && supportsDl(studio.completed.hardwareId);
+  const unitProd = useDl ? 0 : productionCost(hw);
+  const cost = unitProd * q;
   if (q <= 0) {
     game.lastReport = '出荷本数を入力してください';
     return;
@@ -835,11 +864,19 @@ export function ship(quantity: number, studioId: number) {
     return;
   }
   game.money -= cost;
+  const storeFee = useDl ? Math.round(studio.completed.price * store!.commission) : 0;
+  const reachMul = useDl ? (store!.reachMul ?? 1) : 1;
   studio.inventory = q;
   studio.currentSold = 0;
-  studio.onSale = { ...studio.completed, weeksOnSale: 0 };
+  studio.onSale = {
+    ...studio.completed,
+    weeksOnSale: 0,
+    expectedSales: Math.round(studio.completed.expectedSales * reachMul),
+    storeFee
+  };
   studio.completed = null;
-  game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円）`;
+  const channel = useDl ? ` / ${store!.name}（DL）` : '';
+  game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円${channel}）`;
 }
 
 // カタログ作品の再出荷
@@ -959,6 +996,7 @@ function completeDev(studio: Studio) {
     expectedSales,
     price: 5800,
     licenseFee: Math.round((hw.licenseFee ?? 0) * licenseFeeMultiplier()),
+    storeFee: 0,
     weeksOnSale: 0,
     exhibited: d.exhibited
   };
@@ -1053,7 +1091,7 @@ export function advanceWeek() {
       const demand = Math.round(studio.onSale.expectedSales * share);
       const sold = Math.min(studio.inventory, demand);
       if (sold > 0) {
-        const revenue = sold * (studio.onSale.price - studio.onSale.licenseFee);
+        const revenue = sold * (studio.onSale.price - studio.onSale.licenseFee - studio.onSale.storeFee);
         game.money += revenue;
         studio.inventory -= sold;
         game.totalSales += sold;
@@ -1074,6 +1112,7 @@ export function advanceWeek() {
           licenseFee: studio.onSale.licenseFee,
           inventory: studio.inventory,
           soldTotal: studio.currentSold,
+          storeFee: studio.onSale.storeFee,
           exhibited: studio.onSale.exhibited
         });
         studio.inventory = 0;
@@ -1104,7 +1143,7 @@ export function advanceWeek() {
         g.soldTotal += sold;
         game.totalSales += sold;
         tailSold += sold;
-        tailRevenue += sold * (g.price - g.licenseFee);
+        tailRevenue += sold * (g.price - g.licenseFee - g.storeFee);
       }
     }
     if (tailSold > 0) {
@@ -1209,11 +1248,8 @@ export function advanceWeek() {
     if (game.autoExhibit) {
       const msgs: string[] = [];
       for (const s of game.studios) {
+        if (!s.dev) continue; // 開発中の作品のみ自動出展
         const m = performExhibit(s);
-        if (m) msgs.push(m);
-      }
-      for (const g of game.catalog) {
-        const m = performCatalogExhibit(g);
         if (m) msgs.push(m);
       }
       if (msgs.length > 0) reports.push('ゲームデックス（9月）: ' + msgs.join(' / '));
@@ -1268,8 +1304,15 @@ export function loadGame(slot?: number): boolean {
     game.saveSlot = s;
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
-    for (const st of game.studios) if (st.contractId === undefined) st.contractId = null;
-    for (const g of game.catalog) if (g.exhibited === undefined) g.exhibited = false;
+    for (const st of game.studios) {
+      if (st.contractId === undefined) st.contractId = null;
+      if (st.onSale && st.onSale.storeFee === undefined) st.onSale.storeFee = 0;
+      if (st.completed && st.completed.storeFee === undefined) st.completed.storeFee = 0;
+    }
+    for (const g of game.catalog) {
+      if (g.exhibited === undefined) g.exhibited = false;
+      if (g.storeFee === undefined) g.storeFee = 0;
+    }
     if (game.event === undefined) game.event = null;
     if (game.autoExhibit === undefined) game.autoExhibit = false;
     if (game.exhibitYear === undefined) game.exhibitYear = 0;

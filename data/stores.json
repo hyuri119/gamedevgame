@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "DL販売ストア（デジタル販売チャネル）",
+    "note": "後年解禁のDL販売ストア。生産費0・売上手数料(commission)。reachMul は到達率（売上）倍率。releaseYear から利用可能。DL対応ハード（mediaに「ダウンロード」を含む、またはPC）でのみ選択可能。"
+  },
+  "stores": [
+    { "id": "vector", "name": "ベクター", "realName": "Vector", "releaseYear": 1996, "commission": 0.3, "reachMul": 1.5, "desc": "国内最大のPCソフトDLストア" },
+    { "id": "steam", "name": "スチーム", "realName": "Steam", "releaseYear": 2003, "commission": 0.3, "reachMul": 2.0, "desc": "世界的なDL販売プラットフォーム" }
+  ]
+}

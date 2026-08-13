@@ -42,6 +42,7 @@
     restock,
     disposeCatalog,
     unitCost,
+    availableStores,
     availableContracts,
     acceptContract,
     cancelContract,
@@ -122,6 +123,7 @@
 
   // 出荷・再出荷の本数入力
   let shipQtys = $state<Record<number, number>>({});
+  let shipStores = $state<Record<number, string>>({});
   let restockQtys = $state<Record<number, number>>({});
 
   // 自動進行（放置）
@@ -314,11 +316,19 @@
                 出荷本数（上限 {shipCap().toLocaleString()}本）:
                 <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed!.expectedSales, shipCap()))} />
               </label>
-              <span>1本あたり生産費 ¥{unitCost(s.completed!.hardwareId).toLocaleString()}</span>
+              <label>
+                販売先
+                <select bind:value={shipStores[s.id]}>
+                  <option value="">店頭（1本生産費 ¥{unitCost(s.completed!.hardwareId).toLocaleString()}）</option>
+                  {#each availableStores(s.completed!.hardwareId) as st}
+                    <option value={st.id}>{st.name}（DL・生産費0・手数料{Math.round(st.commission * 100)}%・売上×{st.reachMul}）</option>
+                  {/each}
+                </select>
+              </label>
               {#if shipQtys[s.id] > 0}
-                <span>計 ¥{(unitCost(s.completed!.hardwareId) * shipQtys[s.id]).toLocaleString()}</span>
+                <span>生産費計 ¥{((shipStores[s.id] ? 0 : unitCost(s.completed!.hardwareId)) * shipQtys[s.id]).toLocaleString()}</span>
               {/if}
-              <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id)}>出荷する</button>
+              <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id, shipStores[s.id] || undefined)}>出荷する</button>
               <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
             </div>
           {:else if s.onSale}
