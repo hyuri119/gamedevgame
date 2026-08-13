@@ -28,6 +28,9 @@
     techLevel,
     techDesc,
     techCatalog,
+    startHardware,
+    canDevelopHardware,
+    hwName,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -73,6 +76,11 @@
   let studioName = $state('');
   let studioLead = $state('');
 
+  // 自社ハード開発フォーム
+  let hwDevName = $state('');
+  let hwType = $state('家庭用');
+  let hwPower = $state(5);
+
   // 出荷（スタジオごと）
   let shipQtys = $state<Record<number, number>>({});
 
@@ -93,9 +101,7 @@
     startDev(devName, devGenre, devContent, hwId, devStudio);
   }
 
-  const hwName = (id: string) => hardware.hardware.find((h) => h.id === id)?.name ?? id;
   const empName = (id: string | null) => (id ? game.employees.find((e) => e.id === id)?.name ?? '?' : '');
-
   const ranking = $derived([...game.releasedGames].sort((a, b) => b.sold - a.sold));
 
   const achievements = $derived([
@@ -280,11 +286,51 @@
           <select bind:value={devHardware}>
             <option value="">（自動: 最初の1番目）</option>
             {#each availableHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
+            {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円）</option>{/each}
           </select>
         </label>
         <p>相性: {compat}（{devGenre} × {devContent}）</p>
         <button onclick={onStartDev}>開発を始める</button>
       </div>
+    {/if}
+  </section>
+
+  <section>
+    <h2>自社ハード</h2>
+    {#if canDevelopHardware()}
+      {#if game.hwProject}
+        <p>
+          開発中: 「{game.hwProject.name}」（{game.hwProject.type} / 性能{game.hwProject.power}）
+          進捗 {Math.min(100, Math.floor((game.hwProject.progress / game.hwProject.target) * 100))}%
+        </p>
+      {:else}
+        <div class="studio-form">
+          <label>機種名 <input type="text" bind:value={hwDevName} placeholder="機種名" /></label>
+          <label>
+            種類
+            <select bind:value={hwType}>
+              <option value="家庭用">家庭用</option>
+              <option value="携帯型">携帯型</option>
+            </select>
+          </label>
+          <label>
+            性能（開発費＝性能×2億円）
+            <select bind:value={hwPower}>
+              {#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as p}<option value={p}>{p}</option>{/each}
+            </select>
+          </label>
+          <button onclick={() => startHardware(hwDevName || '自社機', hwType, hwPower)}>開発する</button>
+        </div>
+      {/if}
+    {:else}
+      <p>ハードエンジニア（またはスーパーハッカー）を雇用すると自社ハードを開発できます。</p>
+    {/if}
+    {#if game.ownHardware.length > 0}
+      <ul class="hw">
+        {#each game.ownHardware as h}
+          <li>【自社】{h.name}（{h.type} / 性能 {h.params.power} / 普及見込み {Math.round(h.installBase / 10000)}万台）</li>
+        {/each}
+      </ul>
     {/if}
   </section>
 
@@ -405,6 +451,12 @@
         <li>
           {h.name}（{h.realName} / 現在の普及 {Math.round(effectiveInstallBase(h.id, currentYear()) / 10000)}万台 /
           最終 {Math.round((h.installBase ?? 0) / 10000)}万台 / 性能 {h.params?.power ?? '?'}）
+        </li>
+      {/each}
+      {#each game.ownHardware as h}
+        <li>
+          【自社】{h.name}（性能 {h.params.power} / 現在の普及 {Math.round(effectiveInstallBase(h.id, currentYear()) / 10000)}万台 /
+          最終 {Math.round(h.installBase / 10000)}万台 / ライセンス0円）
         </li>
       {/each}
     </ul>

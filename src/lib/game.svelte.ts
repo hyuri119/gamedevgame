@@ -60,6 +60,27 @@ export interface Studio {
   currentSold: number;
 }
 
+export interface OwnHardware {
+  id: string;
+  name: string;
+  type: string;
+  releaseYear: number;
+  installBase: number; // 寿命台数（目標）
+  media: string[];
+  licenseFee: number;
+  networkCost: number; // 週間ネットワーク維持費
+  params: { power: number; popularity: number };
+}
+
+export interface HwProject {
+  name: string;
+  type: string;
+  power: number;
+  progress: number;
+  target: number;
+  cost: number;
+}
+
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
 const DEV_TARGET = 200;
@@ -98,7 +119,11 @@ export const techCatalog: Technology[] = technologiesData.technologies;
 const roles = rolesData.roles as Record<string, { to: string; level: number }>;
 
 function findHardware(id: string) {
-  return hardware.hardware.find((h) => h.id === id);
+  return hardware.hardware.find((h) => h.id === id) ?? game.ownHardware.find((h) => h.id === id);
+}
+
+export function hwName(id: string): string {
+  return findHardware(id)?.name ?? id;
 }
 
 export function compatMark(genre: string, content: string): string {
@@ -134,6 +159,8 @@ const initialState = {
   fame: 0,
   tenants: [] as string[],
   techs: {} as Record<string, number>,
+  ownHardware: [] as OwnHardware[],
+  hwProject: null as HwProject | null,
   yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
   contestYear: 0,
   grandPrix: 0,
@@ -358,6 +385,50 @@ export function acquireCompany() {
   });
   game.fame = Math.min(100, game.fame + 10);
   game.lastReport = '他社を買収し、子会社として運用します（知名度 +10）';
+}
+
+// 自社ハード開発
+export function canDevelopHardware(): boolean {
+  return game.employees.some((e) => e.role === 'ハードエンジニア' || e.role === 'スーパーハッカー');
+}
+
+export function startHardware(name: string, type: string, power: number) {
+  if (game.hwProject) {
+    game.lastReport = 'すでに自社ハードを開発中です';
+    return;
+  }
+  if (!canDevelopHardware()) {
+    game.lastReport = 'ハードエンジニア（またはスーパーハッカー）が必要です';
+    return;
+  }
+  const cost = power * 200_000_000;
+  if (game.money < cost) {
+    game.lastReport = `開発費が足りません（${cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= cost;
+  game.hwProject = { name, type, power, progress: 0, target: power * 4, cost };
+  game.lastReport = `自社ハード「${name}」の開発を開始しました（性能${power}・開発費${cost.toLocaleString()}円）`;
+}
+
+function completeHardware(): string {
+  const p = game.hwProject!;
+  const installBase = p.power * 1_000_000;
+  const networkCost = p.power >= 7 ? p.power * 200_000 : 0;
+  game.ownHardware.push({
+    id: 'own-' + (game.ownHardware.length + 1),
+    name: p.name,
+    type: p.type,
+    releaseYear: currentYear(),
+    installBase,
+    media: p.type === '家庭用' ? ['光ディスク'] : ['カセット'],
+    licenseFee: 0,
+    networkCost,
+    params: { power: p.power, popularity: p.power }
+  });
+  game.hwProject = null;
+  game.fame = Math.min(100, game.fame + 5);
+  return `自社ハード「${p.name}」が完成！ 普及見込み ${Math.round(installBase / 10000).toLocaleString()}万台（ライセンス料0円で開発可能）`;
 }
 
 export function startDev(name: string, genre: string, content: string, hardwareId: string, studioId: number) {
@@ -624,6 +695,25 @@ export function advanceWeek() {
         studio.onSale = null;
         studio.currentSold = 0;
       }
+    }
+  }
+
+  // 自社ハード開発の進行
+  if (game.hwProject) {
+    game.hwProject.progress += 1;
+    if (game.hwProject.progress >= game.hwProject.target) {
+      reports.push(completeHardware());
+    }
+  }
+
+  // 自社ハードのライセンス収益・ネットワーク維持費
+  for (const oh of game.ownHardware) {
+    const ib = effectiveInstallBase(oh.id, currentYear());
+    const income = Math.round(ib * 3);
+    const net = income - oh.networkCost;
+    if (net !== 0) {
+      game.money += net;
+      reports.push(`自社ハード「${oh.name}」${net >= 0 ? '収益' : '維持費'} ${net >= 0 ? '+' : ''}${net.toLocaleString()}円`);
     }
   }
 
