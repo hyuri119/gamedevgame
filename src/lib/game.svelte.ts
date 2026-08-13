@@ -119,7 +119,6 @@ const MAX_STUDIOS = 5;
 const SHIP_CAP_BASE = 500_000;
 const SHIP_CAP_FACTORY = 2_000_000;
 const STUDIO_COST = 300_000_000;
-const ACQUIRE_COST = 800_000_000;
 const ARCADE_DEV_TARGET = 120;
 const ARCADE_WEEKS = 24;
 const ARCADE_INCOME = 30_000;
@@ -186,6 +185,7 @@ const initialState = {
   fame: 0,
   tenants: [] as string[],
   techs: {} as Record<string, number>,
+  licenses: [] as string[],
   ownHardware: [] as OwnHardware[],
   hwProject: null as HwProject | null,
   arcadeProject: null as ArcadeProject | null,
@@ -247,6 +247,29 @@ export function buyTenant(id: string) {
 
 export function shipCap(): number {
   return hasTenant('factory') ? SHIP_CAP_FACTORY : SHIP_CAP_BASE;
+}
+
+export function licenseCost(id: string): number {
+  const hw = findHardware(id);
+  if (!hw || hw.installBase == null) return 0;
+  return Math.round(hw.installBase * 2);
+}
+
+export function hasLicense(id: string): boolean {
+  if (game.ownHardware.some((h) => h.id === id)) return true;
+  return game.licenses.includes(id);
+}
+
+export function buyLicense(id: string) {
+  if (hasLicense(id)) return;
+  const cost = licenseCost(id);
+  if (game.money < cost) {
+    game.lastReport = `ライセンス取得費が足りません（${hwName(id)} は ${cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= cost;
+  game.licenses.push(id);
+  game.lastReport = `${hwName(id)} のライセンスを取得しました（${cost.toLocaleString()}円）`;
 }
 
 function licenseFeeMultiplier(): number {
@@ -391,17 +414,28 @@ export function foundStudio(name: string, leadId: string) {
   game.lastReport = `新スタジオ「${name}」を発足しました（責任者: ${lead.name}）`;
 }
 
-// 他社買収（子会社として運用、責任者不要・知名度アップ）
+// 他社買収（子会社として運用、責任者不要・知名度アップ。交渉失敗リスクあり）
 export function acquireCompany() {
   if (game.studios.length >= MAX_STUDIOS) {
     game.lastReport = `スタジオは最大${MAX_STUDIOS}つまでです`;
     return;
   }
-  if (game.money < ACQUIRE_COST) {
-    game.lastReport = `買収資金が足りません（${ACQUIRE_COST.toLocaleString()}円 必要）`;
+  const negotiateFee = 200_000_000;
+  const buyPrice = 600_000_000;
+  if (game.money < negotiateFee) {
+    game.lastReport = `交渉費用が足りません（${negotiateFee.toLocaleString()}円 必要）`;
     return;
   }
-  game.money -= ACQUIRE_COST;
+  game.money -= negotiateFee;
+  if (Math.random() < 0.25) {
+    game.lastReport = `買収交渉が決裂しました…交渉費用 ${negotiateFee.toLocaleString()}円 を失いました`;
+    return;
+  }
+  if (game.money < buyPrice) {
+    game.lastReport = `買収資金が不足したため交渉が白紙に…（交渉費 ${negotiateFee.toLocaleString()}円 を失いました）`;
+    return;
+  }
+  game.money -= buyPrice;
   game.studios.push({
     id: nextStudioId(),
     name: `子会社${game.studios.length}`,
@@ -413,7 +447,21 @@ export function acquireCompany() {
     currentSold: 0
   });
   game.fame = Math.min(100, game.fame + 10);
-  game.lastReport = '他社を買収し、子会社として運用します（知名度 +10）';
+  const n = game.employees.filter((e) => e.id.startsWith('acquired')).length + 1;
+  game.employees.push({
+    id: 'acquired' + n,
+    name: `買収した社員${n}`,
+    role: 'プログラマ',
+    level: 2,
+    fun: 20,
+    creativity: 15,
+    graphics: 20,
+    music: 10,
+    speed: 20,
+    salary: 3_000_000,
+    contract: 0
+  });
+  game.lastReport = '他社を買収し、子会社として運用します（知名度 +10、社員1名を引き継ぎ）';
 }
 
 // 自社ハード開発
@@ -906,6 +954,13 @@ export function advanceWeek() {
   if (Math.random() < 0.06 && game.fame < 100) {
     game.fame = Math.min(100, game.fame + 2);
     reports.push('雑誌社から取材が来ました（知名度 +2）');
+  }
+
+  // 自社が買収されそうになる危機（資金・知名度が低いと発生）
+  if (!game.gameOver && game.money < 100_000_000 && game.fame < 30 && Math.random() < 0.02) {
+    const defense = 30_000_000;
+    game.money -= defense;
+    reports.push(`大手企業が当社の買収を仕掛けてきました！防衛に奔走（防衛費 ${defense.toLocaleString()}円）`);
   }
 
   // 年1回のコンテスト（12月）

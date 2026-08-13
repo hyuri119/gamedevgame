@@ -34,6 +34,9 @@
     startArcade,
     finishArcade,
     portArcade,
+    buyLicense,
+    hasLicense,
+    licenseCost,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -53,6 +56,9 @@
         (h.endYear == null || h.endYear >= currentYear())
     )
   );
+
+  const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
+  const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
   const hiredIds = $derived(new Set(game.employees.map((e) => e.id)));
   const pool = $derived(employeePool.filter((e) => !hiredIds.has(e.id)));
@@ -115,14 +121,16 @@
       ? 'ゲームオーバー（ブラウザをリロードで再挑戦）'
       : game.employees.length === 0
         ? 'まず社員を雇用しよう'
-        : busyStudios.length > 0
-          ? '「次の週へ」を押して開発・販売を進めよう'
-          : '開発を始めよう'
+        : licensedHardware.length === 0 && game.ownHardware.length === 0
+          ? 'ハードのライセンスを取得しよう'
+          : busyStudios.length > 0
+            ? '「次の週へ」を押して開発・販売を進めよう'
+            : '開発を始めよう'
   );
 
   function onStartDev() {
     if (!devStudio) return;
-    const hwId = devHardware || availableHardware[0]?.id;
+    const hwId = devHardware || licensedHardware[0]?.id || game.ownHardware[0]?.id;
     if (!hwId) return;
     startDev(devName, devGenre, devContent, hwId, devStudio);
   }
@@ -319,7 +327,7 @@
           ハード
           <select bind:value={devHardware}>
             <option value="">（自動: 最初の1番目）</option>
-            {#each availableHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
+            {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
             {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円）</option>{/each}
           </select>
         </label>
@@ -539,6 +547,27 @@
     </ul>
   </section>
 
+  {#if unlicensedHardware.length > 0}
+    <section>
+      <h2>ライセンス取得</h2>
+      <p>ハード向けに開発するにはライセンスが必要です。</p>
+      <table>
+        <thead>
+          <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each unlicensedHardware as h}
+            <tr>
+              <td>{h.name}（{h.realName}）</td>
+              <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
+              <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </section>
+  {/if}
+
   <section>
     <h2>参入可能ハード（{currentYear()}年）</h2>
     <ul class="hw">
@@ -546,6 +575,7 @@
         <li>
           {h.name}（{h.realName} / 現在の普及 {Math.round(effectiveInstallBase(h.id, currentYear()) / 10000)}万台 /
           最終 {Math.round((h.installBase ?? 0) / 10000)}万台 / 性能 {h.params?.power ?? '?'}）
+          {hasLicense(h.id) ? '［取得済み］' : '［要ライセンス］'}
         </li>
       {/each}
       {#each game.ownHardware as h}
