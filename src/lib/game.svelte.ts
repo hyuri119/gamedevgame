@@ -122,6 +122,7 @@ const STUDIO_COST = 300_000_000;
 const ARCADE_DEV_TARGET = 120;
 const ARCADE_WEEKS = 24;
 const ARCADE_INCOME = 30_000;
+const PC_SALES_COEFF = 0.3; // PCはバランス上売れにくい
 
 export const employeePool: Employee[] = employeesData.employees;
 
@@ -176,6 +177,11 @@ export function effectiveInstallBase(id: string, year: number): number {
 
 function fameCoeff(fame: number): number {
   return 1 + (fame / 100) * 0.5;
+}
+
+// 市場係数（ハード種別による売れやすさの差）
+function marketFactor(hw: ReturnType<typeof findHardware>): number {
+  return hw?.type === 'pc' ? PC_SALES_COEFF : 1.0;
 }
 
 const initialState = {
@@ -601,7 +607,7 @@ export function portArcade(idx: number) {
 
   const quality = 0.5 + score / 100;
   const compat = compatCoeff(ag.genre, ag.content);
-  const reach = 0.08 * quality * compat * fameCoeff(game.fame);
+  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * marketFactor(hw);
   const expectedSales = Math.round(effectiveInstallBase(homeHw.id, y) * reach);
 
   studio.completed = {
@@ -757,7 +763,7 @@ function completeDev(studio: Studio) {
   const compat = compatCoeff(d.genre, d.content);
   const m = month();
   const season = m === 7 || m === 12 ? 1.3 : 1.0;
-  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * season;
+  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * season * marketFactor(hw);
   const expectedSales = Math.round(effectiveInstallBase(d.hardwareId, currentYear()) * reach);
 
   studio.completed = {
@@ -956,8 +962,8 @@ export function advanceWeek() {
     reports.push('雑誌社から取材が来ました（知名度 +2）');
   }
 
-  // 自社が買収されそうになる危機（資金・知名度が低いと発生）
-  if (!game.gameOver && game.money < 100_000_000 && game.fame < 30 && Math.random() < 0.02) {
+  // 自社が買収されそうになる危機（資金・知名度が低いと発生。序盤3年は猶予）
+  if (!game.gameOver && year() >= 3 && game.money < 100_000_000 && game.fame < 30 && Math.random() < 0.02) {
     const defense = 30_000_000;
     game.money -= defense;
     reports.push(`大手企業が当社の買収を仕掛けてきました！防衛に奔走（防衛費 ${defense.toLocaleString()}円）`);

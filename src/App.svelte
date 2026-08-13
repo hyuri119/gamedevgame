@@ -41,6 +41,7 @@
     compatMark
   } from './lib/game.svelte';
   import { hardware, kumiawase, availableGenres, availableContents } from './lib/data';
+  import OfficeCanvas from './lib/OfficeCanvas.svelte';
 
   const weekOfMonth = $derived(((game.week - 1) % 4) + 1);
 
@@ -177,6 +178,11 @@
     <button onclick={resetGame}>リセット</button>
     <p class="report">{game.lastReport}</p>
   </header>
+
+  <section>
+    <h2>オフィス</h2>
+    <OfficeCanvas />
+  </section>
 
   <section>
     <h2>社員（{game.employees.length}人）</h2>
