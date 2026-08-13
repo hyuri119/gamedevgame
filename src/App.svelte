@@ -40,6 +40,7 @@
     canDevelopHardware,
     hwName,
     devTarget,
+    hardwarePower,
     restock,
     disposeCatalog,
     unitCost,
@@ -75,8 +76,8 @@
   const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
   const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
-  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.onSale && !s.contractId));
-  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.onSale || s.contractId));
+  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.contractId));
+  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.contractId));
   const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
 
   // モーダル状態
@@ -266,7 +267,13 @@
         <button onclick={() => (activeTab = 'dev')}>詳細</button>
       </div>
     {/each}
-    {#if game.studios.filter((s) => s.dev).length === 0 && game.studios.filter((s) => s.completed).length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
+    {#each game.sales as sale, i (sale.game.name + i)}
+      <div class="prow">
+        <span class="plabel">販売中: 「{sale.game.name}」</span>
+        <span class="pnote">在庫 {sale.inventory.toLocaleString()}本（{sale.game.weeksOnSale}週目）</span>
+      </div>
+    {/each}
+    {#if game.studios.filter((s) => s.dev).length === 0 && game.studios.filter((s) => s.completed).length === 0 && game.sales.length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
       <p class="pnote">進行中の開発・出荷待ちの作品はありません</p>
     {/if}
   </section>
@@ -332,8 +339,6 @@
               <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id, shipStores[s.id] || undefined)}>出荷する</button>
               <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
             </div>
-          {:else if s.onSale}
-            <p>販売中: 「{s.onSale.name}」在庫 {s.inventory.toLocaleString()}本（{s.onSale.weeksOnSale}週目）</p>
           {:else if s.contractId}
             <p>受注案件を開発中</p>
           {:else}
@@ -370,7 +375,7 @@
             ハード
             <select bind:value={devHardware}>
               <option value="">（自動: 最初の1番目）</option>
-              {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}・性能{h.params.power}）</option>{/each}
+              {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}・性能{hardwarePower(h.id)}）</option>{/each}
               {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円・性能{h.params.power}）</option>{/each}
             </select>
           </label>

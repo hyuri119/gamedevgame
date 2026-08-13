@@ -59,10 +59,14 @@ export interface Studio {
   leadId: string | null;
   dev: DevProject | null;
   completed: CompletedGame | null;
-  inventory: number;
-  onSale: CompletedGame | null;
-  currentSold: number;
   contractId: string | null;
+}
+
+export interface OnSaleGame {
+  studioName: string;
+  game: CompletedGame;
+  inventory: number;
+  currentSold: number;
 }
 
 export interface OwnHardware {
@@ -214,13 +218,21 @@ export function hwName(id: string): string {
   return findHardware(id)?.name ?? id;
 }
 
-export function hardwarePower(id: string): number {
-  return findHardware(id)?.params?.power ?? 5;
+// PCの性能は時代に合わせて成長（1983年=1、10年ごとに+2）
+function pcPower(year: number): number {
+  return Math.min(10, 1 + Math.floor((year - START_YEAR) / 10) * 2);
+}
+
+export function hardwarePower(id: string, year?: number): number {
+  const hw = findHardware(id);
+  if (!hw) return 5;
+  if (hw.type === 'pc') return pcPower(year ?? currentYear());
+  return hw.params?.power ?? 5;
 }
 
 // 開発目標値: ハードのスペック(power)に比例して増える。高スペックほど作り込める＝時間がかかる
-export function devTarget(hardwareId: string): number {
-  return hardwarePower(hardwareId) * DEV_TARGET_PER_POWER;
+export function devTarget(hardwareId: string, year?: number): number {
+  return hardwarePower(hardwareId, year) * DEV_TARGET_PER_POWER;
 }
 
 export function compatMark(genre: string, content: string): string {
@@ -253,7 +265,7 @@ export function availableStores(hardwareId: string): Store[] {
 }
 
 export function freeStudio(): Studio | undefined {
-  return game.studios.find((s) => !s.dev && !s.completed && !s.onSale && !s.contractId);
+  return game.studios.find((s) => !s.dev && !s.completed && !s.contractId);
 }
 
 export function effectiveInstallBase(id: string, year: number): number {
@@ -298,6 +310,7 @@ const initialState = {
   contestYear: 0,
   grandPrix: 0,
   catalog: [] as CatalogGame[],
+  sales: [] as OnSaleGame[],
   hallOfFame: [] as CompletedGame[],
   activeContract: null as ActiveContract | null,
   doneContracts: [] as string[],
@@ -313,7 +326,7 @@ const initialState = {
 
 function initialStudios(): Studio[] {
   return [
-    { id: 1, name: '本社', leadId: null, dev: null, completed: null, inventory: 0, onSale: null, currentSold: 0, contractId: null }
+    { id: 1, name: '本社', leadId: null, dev: null, completed: null, contractId: null }
   ];
 }
 
@@ -537,9 +550,6 @@ export function foundStudio(name: string, leadId: string) {
     leadId,
     dev: null,
     completed: null,
-    inventory: 0,
-    onSale: null,
-    currentSold: 0,
     contractId: null
   });
   game.lastReport = `新スタジオ「${name}」を発足しました（責任者: ${lead.name}）`;
@@ -573,9 +583,6 @@ export function acquireCompany() {
     leadId: null,
     dev: null,
     completed: null,
-    inventory: 0,
-    onSale: null,
-    currentSold: 0,
     contractId: null
   });
   game.fame = Math.min(100, game.fame + 10);
@@ -662,8 +669,7 @@ export function finishArcade() {
 
 function completeArcade(): string {
   const p = game.arcadeProject!;
-  const hw = findHardware(p.boardId);
-  const power = hw?.params?.power ?? 5;
+  const power = hardwarePower(p.boardId);
   const cap = power * 10;
   const n = game.employees.length || 1;
   const avg = (key: 'fun' | 'creativity' | 'graphics' | 'music') =>
@@ -718,7 +724,7 @@ export function portArcade(idx: number) {
     return;
   }
   const hw = findHardware(homeHw.id)!;
-  const power = hw.params?.power ?? 5;
+  const power = hardwarePower(homeHw.id);
   const cap = power * 10;
 
   const fun = Math.min(100, ag.fun + 10);
@@ -887,14 +893,17 @@ export function ship(quantity: number, studioId: number, storeId?: string) {
   game.money -= cost;
   const storeFee = useDl ? Math.round(studio.completed.price * store!.commission) : 0;
   const reachMul = useDl ? (store!.reachMul ?? 1) : 1;
-  studio.inventory = q;
-  studio.currentSold = 0;
-  studio.onSale = {
-    ...studio.completed,
-    weeksOnSale: 0,
-    expectedSales: Math.round(studio.completed.expectedSales * reachMul),
-    storeFee
-  };
+  game.sales.push({
+    studioName: studio.name,
+    game: {
+      ...studio.completed,
+      weeksOnSale: 0,
+      expectedSales: Math.round(studio.completed.expectedSales * reachMul),
+      storeFee
+    },
+    inventory: q,
+    currentSold: 0
+  });
   studio.completed = null;
   const channel = useDl ? ` / ${store!.name}（DL）` : '';
   game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円${channel}）`;
@@ -974,7 +983,7 @@ export function finishGame(studioId: number) {
 function completeDev(studio: Studio) {
   const d = studio.dev!;
   const hw = findHardware(d.hardwareId)!;
-  const power = hw.params?.power ?? 5;
+  const power = hardwarePower(d.hardwareId);
   const cap = power * 10;
   const n = game.employees.length || 1;
 
@@ -1103,43 +1112,42 @@ export function advanceWeek() {
         }
       }
     }
+  }
 
-    // 販売
-    if (studio.onSale && studio.inventory > 0) {
-      studio.onSale.weeksOnSale += 1;
-      const w = studio.onSale.weeksOnSale;
-      const share = SALES_SHARE[w] ?? 0;
-      const demand = Math.round(studio.onSale.expectedSales * share);
-      const sold = Math.min(studio.inventory, demand);
-      if (sold > 0) {
-        const revenue = sold * (studio.onSale.price - studio.onSale.licenseFee - studio.onSale.storeFee);
-        game.money += revenue;
-        studio.inventory -= sold;
-        game.totalSales += sold;
-        studio.currentSold += sold;
-        reports.push(`「${studio.onSale.name}」を ${sold.toLocaleString()}本 販売（+${revenue.toLocaleString()}円）`);
-      }
-      if (w >= 6 || studio.inventory === 0) {
-        // 発売キャンペーン終了 → カタログへ移行（ロングテール販売・再出荷可能に）
-        game.catalog.push({
-          name: studio.onSale.name,
-          genre: studio.onSale.genre,
-          content: studio.onSale.content,
-          hardwareId: studio.onSale.hardwareId,
-          reviewScore: studio.onSale.reviewScore,
-          hallOfFame: studio.onSale.hallOfFame,
-          expectedSales: studio.onSale.expectedSales,
-          price: studio.onSale.price,
-          licenseFee: studio.onSale.licenseFee,
-          inventory: studio.inventory,
-          soldTotal: studio.currentSold,
-          storeFee: studio.onSale.storeFee,
-          exhibited: studio.onSale.exhibited
-        });
-        studio.inventory = 0;
-        studio.onSale = null;
-        studio.currentSold = 0;
-      }
+  // 発売キャンペーン販売（スタジオから切り離し、販売中も次の開発が可能）
+  for (let i = game.sales.length - 1; i >= 0; i--) {
+    const sale = game.sales[i];
+    sale.game.weeksOnSale += 1;
+    const w = sale.game.weeksOnSale;
+    const share = SALES_SHARE[w] ?? 0;
+    const demand = Math.round(sale.game.expectedSales * share);
+    const sold = Math.min(sale.inventory, demand);
+    if (sold > 0) {
+      const revenue = sold * (sale.game.price - sale.game.licenseFee - sale.game.storeFee);
+      game.money += revenue;
+      sale.inventory -= sold;
+      game.totalSales += sold;
+      sale.currentSold += sold;
+      reports.push(`「${sale.game.name}」を ${sold.toLocaleString()}本 販売（+${revenue.toLocaleString()}円）`);
+    }
+    if (w >= 6 || sale.inventory === 0) {
+      // 発売キャンペーン終了 → カタログへ移行（ロングテール販売・再出荷可能に）
+      game.catalog.push({
+        name: sale.game.name,
+        genre: sale.game.genre,
+        content: sale.game.content,
+        hardwareId: sale.game.hardwareId,
+        reviewScore: sale.game.reviewScore,
+        hallOfFame: sale.game.hallOfFame,
+        expectedSales: sale.game.expectedSales,
+        price: sale.game.price,
+        licenseFee: sale.game.licenseFee,
+        inventory: sale.inventory,
+        soldTotal: sale.currentSold,
+        storeFee: sale.game.storeFee,
+        exhibited: sale.game.exhibited
+      });
+      game.sales.splice(i, 1);
     }
   }
 
@@ -1331,10 +1339,22 @@ export function loadGame(slot?: number): boolean {
     game.saveSlot = s;
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
-    for (const st of game.studios) {
+    if (!Array.isArray(game.sales)) game.sales = [];
+    // 旧セーブ移行: studio.onSale → game.sales
+    for (const st of game.studios as unknown as Record<string, unknown>[]) {
       if (st.contractId === undefined) st.contractId = null;
-      if (st.onSale && st.onSale.storeFee === undefined) st.onSale.storeFee = 0;
-      if (st.completed && st.completed.storeFee === undefined) st.completed.storeFee = 0;
+      if (st.completed && (st.completed as CompletedGame).storeFee === undefined) (st.completed as CompletedGame).storeFee = 0;
+      if (st.onSale) {
+        game.sales.push({
+          studioName: st.name as string,
+          game: st.onSale as CompletedGame,
+          inventory: (st.inventory as number) ?? 0,
+          currentSold: (st.currentSold as number) ?? 0
+        });
+        delete st.onSale;
+        delete st.inventory;
+        delete st.currentSold;
+      }
     }
     for (const g of game.catalog) {
       if (g.exhibited === undefined) g.exhibited = false;
