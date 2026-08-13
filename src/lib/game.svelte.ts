@@ -18,6 +18,7 @@ export interface Employee {
   speed: number;
   salary: number;
   contract: number;
+  availableFrom?: number;
 }
 
 export interface DevProject {
@@ -469,7 +470,10 @@ export function hire(id: string) {
 
 // スカウト（雇用候補をランダムに数人提示）
 export function scout() {
-  const unhired = employeePool.filter((e) => !game.employees.some((h) => h.id === e.id));
+  const y = currentYear();
+  const unhired = employeePool.filter(
+    (e) => !game.employees.some((h) => h.id === e.id) && (e.availableFrom ?? START_YEAR) <= y
+  );
   const shuffled = [...unhired].sort(() => Math.random() - 0.5);
   game.scoutCandidates = shuffled.slice(0, 4);
   if (game.scoutCandidates.length === 0) {
@@ -1230,6 +1234,12 @@ export function advanceWeek() {
   if (Math.random() < 0.06 && game.fame < 100) {
     game.fame = Math.min(100, game.fame + 2);
     reports.push('雑誌社から取材が来ました（知名度 +2）');
+  }
+
+  // ランダムイベント: ファンレター
+  if (Math.random() < 0.05 && game.fame >= 5 && game.catalog.length > 0) {
+    game.fame = Math.min(100, game.fame + 1);
+    reports.push('ファンからファンレターが届きました（知名度 +1）');
   }
 
   // 自社が買収されそうになる危機（資金・知名度が低いと発生。序盤3年は猶予）
