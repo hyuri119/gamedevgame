@@ -218,6 +218,15 @@ export function hwName(id: string): string {
   return findHardware(id)?.name ?? id;
 }
 
+// 金額の短縮表示: 1万円以上は万円、1億円以上は億円で表示
+export function man(yen: number): string {
+  const v = Math.round(yen);
+  const abs = Math.abs(v);
+  if (abs >= 100_000_000) return `${(v / 100_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}億円`;
+  if (abs >= 10000) return `${Math.round(v / 10000).toLocaleString()}万円`;
+  return `${v.toLocaleString()}円`;
+}
+
 // PCの性能は時代に合わせて成長（1983年=1、10年ごとに+2）
 function pcPower(year: number): number {
   return Math.min(10, 1 + Math.floor((year - START_YEAR) / 10) * 2);
@@ -361,7 +370,7 @@ export function buyTenant(id: string) {
     return;
   }
   if (game.money < t.cost) {
-    game.lastReport = `建設費用が足りません（${t.name} は ${t.cost.toLocaleString()}円 必要）`;
+    game.lastReport = `建設費用が足りません（${t.name} は ${man(t.cost)} 必要）`;
     return;
   }
   game.money -= t.cost;
@@ -391,12 +400,12 @@ export function buyLicense(id: string) {
   if (hasLicense(id)) return;
   const cost = licenseCost(id);
   if (game.money < cost) {
-    game.lastReport = `ライセンス取得費が足りません（${hwName(id)} は ${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `ライセンス取得費が足りません（${hwName(id)} は ${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
   game.licenses.push(id);
-  game.lastReport = `${hwName(id)} のライセンスを取得しました（${cost.toLocaleString()}円）`;
+  game.lastReport = `${hwName(id)} のライセンスを取得しました（${man(cost)}）`;
 }
 
 function licenseFeeMultiplier(): number {
@@ -421,7 +430,7 @@ export function buyTech(id: string) {
   if (lv >= t.maxLevel) return;
   const cost = t.costs[lv];
   if (game.money < cost) {
-    game.lastReport = `研究費用が足りません（${t.name} Lv${lv + 1} は ${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `研究費用が足りません（${t.name} Lv${lv + 1} は ${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
@@ -448,7 +457,7 @@ export function evolve(id: string) {
   }
   const cost = 30_000_000;
   if (game.money < cost) {
-    game.lastReport = `進化費用が足りません（${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `進化費用が足りません（${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
@@ -470,7 +479,7 @@ export function train(id: string) {
   }
   const cost = emp.level * 5_000_000;
   if (game.money < cost) {
-    game.lastReport = `教育費用が足りません（${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `教育費用が足りません（${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
@@ -489,13 +498,13 @@ export function hire(id: string) {
   if (!emp) return;
   if (game.employees.some((e) => e.id === id)) return;
   if (game.money < emp.contract) {
-    game.lastReport = `契約金が足りません（${emp.name} は ${emp.contract.toLocaleString()}円 必要）`;
+    game.lastReport = `契約金が足りません（${emp.name} は ${man(emp.contract)} 必要）`;
     return;
   }
   game.money -= emp.contract;
   game.employees.push({ ...emp });
   game.scoutCandidates = game.scoutCandidates.filter((c) => c.id !== id);
-  game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${emp.contract.toLocaleString()}円）`;
+  game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${man(emp.contract)}）`;
 }
 
 // スカウト（雇用候補をランダムに数人提示）
@@ -540,7 +549,7 @@ export function foundStudio(name: string, leadId: string) {
     return;
   }
   if (game.money < STUDIO_COST) {
-    game.lastReport = `発足費用が足りません（${STUDIO_COST.toLocaleString()}円 必要）`;
+    game.lastReport = `発足費用が足りません（${man(STUDIO_COST)} 必要）`;
     return;
   }
   game.money -= STUDIO_COST;
@@ -564,16 +573,16 @@ export function acquireCompany() {
   const negotiateFee = 200_000_000;
   const buyPrice = 600_000_000;
   if (game.money < negotiateFee) {
-    game.lastReport = `交渉費用が足りません（${negotiateFee.toLocaleString()}円 必要）`;
+    game.lastReport = `交渉費用が足りません（${man(negotiateFee)} 必要）`;
     return;
   }
   game.money -= negotiateFee;
   if (Math.random() < 0.25) {
-    game.lastReport = `買収交渉が決裂しました…交渉費用 ${negotiateFee.toLocaleString()}円 を失いました`;
+    game.lastReport = `買収交渉が決裂しました…交渉費用 ${man(negotiateFee)} を失いました`;
     return;
   }
   if (game.money < buyPrice) {
-    game.lastReport = `買収資金が不足したため交渉が白紙に…（交渉費 ${negotiateFee.toLocaleString()}円 を失いました）`;
+    game.lastReport = `買収資金が不足したため交渉が白紙に…（交渉費 ${man(negotiateFee)} を失いました）`;
     return;
   }
   game.money -= buyPrice;
@@ -619,12 +628,12 @@ export function startHardware(name: string, type: string, power: number) {
   }
   const cost = power * 200_000_000;
   if (game.money < cost) {
-    game.lastReport = `開発費が足りません（${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `開発費が足りません（${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
   game.hwProject = { name, type, power, progress: 0, target: power * 4, cost };
-  game.lastReport = `自社ハード「${name}」の開発を開始しました（性能${power}・開発費${cost.toLocaleString()}円）`;
+  game.lastReport = `自社ハード「${name}」の開発を開始しました（性能${power}・開発費${man(cost)}）`;
 }
 
 function completeHardware(): string {
@@ -699,7 +708,7 @@ function completeArcade(): string {
     music
   });
   game.arcadeProject = null;
-  return `アーケード「${p.name}」が完成！ 稼働率 ${opeRate}（週間インカム ${(opeRate * ARCADE_INCOME).toLocaleString()}円）`;
+  return `アーケード「${p.name}」が完成！ 稼働率 ${opeRate}（週間インカム ${man(opeRate * ARCADE_INCOME)}）`;
 }
 
 // アーケード作品を家庭用に移植（稼働率60以上、知名度上乗せ）
@@ -846,7 +855,7 @@ export function exhibitStudio(studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio) return;
   if (game.money < EXHIBIT_FEE) {
-    game.lastReport = `出展費用が足りません（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
+    game.lastReport = `出展費用が足りません（${man(EXHIBIT_FEE)} 必要）`;
     return;
   }
   game.lastReport = performExhibit(studio) ?? '出展できる作品がありません';
@@ -856,7 +865,7 @@ export function exhibitCatalog(idx: number) {
   const g = game.catalog[idx];
   if (!g) return;
   if (game.money < EXHIBIT_FEE) {
-    game.lastReport = `出展費用が足りません（${EXHIBIT_FEE.toLocaleString()}円 必要）`;
+    game.lastReport = `出展費用が足りません（${man(EXHIBIT_FEE)} 必要）`;
     return;
   }
   game.lastReport = performCatalogExhibit(g) ?? '出展できる作品がありません';
@@ -887,7 +896,7 @@ export function ship(quantity: number, studioId: number, storeId?: string) {
     return;
   }
   if (game.money < cost) {
-    game.lastReport = `生産費用が足りません（${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `生産費用が足りません（${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
@@ -906,7 +915,7 @@ export function ship(quantity: number, studioId: number, storeId?: string) {
   });
   studio.completed = null;
   const channel = useDl ? ` / ${store!.name}（DL）` : '';
-  game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円${channel}）`;
+  game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${man(cost)}${channel}）`;
 }
 
 // カタログ作品の再出荷
@@ -918,12 +927,12 @@ export function restock(idx: number, quantity: number) {
   const hw = findHardware(g.hardwareId);
   const cost = productionCost(hw) * q;
   if (game.money < cost) {
-    game.lastReport = `生産費用が足りません（${cost.toLocaleString()}円 必要）`;
+    game.lastReport = `生産費用が足りません（${man(cost)} 必要）`;
     return;
   }
   game.money -= cost;
   g.inventory += q;
-  game.lastReport = `「${g.name}」を再出荷しました（+${q.toLocaleString()}本 / 生産費 ${cost.toLocaleString()}円）`;
+  game.lastReport = `「${g.name}」を再出荷しました（+${q.toLocaleString()}本 / 生産費 ${man(cost)}）`;
 }
 
 // カタログ作品の在庫処分（リサイクルショップがあれば買い取り）
@@ -933,7 +942,7 @@ export function disposeCatalog(idx: number) {
   if (hasTenant('recycle')) {
     const refund = g.inventory * 500;
     game.money += refund;
-    game.lastReport = `「${g.name}」の在庫 ${g.inventory.toLocaleString()}本 を処分（リサイクル回収 +${refund.toLocaleString()}円）`;
+    game.lastReport = `「${g.name}」の在庫 ${g.inventory.toLocaleString()}本 を処分（リサイクル回収 +${man(refund)}）`;
   } else {
     game.lastReport = `「${g.name}」の在庫 ${g.inventory.toLocaleString()}本 を処分しました`;
   }
@@ -963,7 +972,7 @@ export function acceptContract(id: string) {
   }
   studio.contractId = c.id;
   game.activeContract = { id: c.id, name: c.name, reward: c.reward, deadline: c.deadline, target: c.target, progress: 0, elapsed: 0, studioId: studio.id };
-  game.lastReport = `受注案件「${c.name}」を受注しました（${studio.name}で開発 / 報酬 ${c.reward.toLocaleString()}円 / 納期 ${c.deadline}週）`;
+  game.lastReport = `受注案件「${c.name}」を受注しました（${studio.name}で開発 / 報酬 ${man(c.reward)} / 納期 ${c.deadline}週）`;
 }
 
 export function cancelContract() {
@@ -1080,7 +1089,7 @@ function holdContest(): string | null {
 
   game.fame = Math.min(100, game.fame + fame);
   game.money += prize;
-  if (prize > 0) msgs.push(`賞金 +${prize.toLocaleString()}円`);
+  if (prize > 0) msgs.push(`賞金 +${man(prize)}`);
   return msgs.join(' / ');
 }
 
@@ -1128,7 +1137,7 @@ export function advanceWeek() {
       sale.inventory -= sold;
       game.totalSales += sold;
       sale.currentSold += sold;
-      reports.push(`「${sale.game.name}」を ${sold.toLocaleString()}本 販売（+${revenue.toLocaleString()}円）`);
+      reports.push(`「${sale.game.name}」を ${sold.toLocaleString()}本 販売（+${man(revenue)}）`);
     }
     if (w >= 6 || sale.inventory === 0) {
       // 発売キャンペーン終了 → カタログへ移行（ロングテール販売・再出荷可能に）
@@ -1177,7 +1186,7 @@ export function advanceWeek() {
     }
     if (tailSold > 0) {
       game.money += tailRevenue;
-      reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${tailRevenue.toLocaleString()}円）`);
+      reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${man(tailRevenue)}）`);
     }
   }
 
@@ -1195,7 +1204,7 @@ export function advanceWeek() {
       game.money += pay;
       game.doneContracts.push(c.id);
       if (studio) studio.contractId = null;
-      reports.push(`受注案件「${c.name}」を納品しました（報酬 ${pay.toLocaleString()}円${onTime ? '' : '・納期遅れで減額'}）`);
+      reports.push(`受注案件「${c.name}」を納品しました（報酬 ${man(pay)}${onTime ? '' : '・納期遅れで減額'}）`);
       game.activeContract = null;
     }
   }
@@ -1215,7 +1224,7 @@ export function advanceWeek() {
     const net = income - oh.networkCost;
     if (net !== 0) {
       game.money += net;
-      reports.push(`自社ハード「${oh.name}」${net >= 0 ? '収益' : '維持費'} ${net >= 0 ? '+' : ''}${net.toLocaleString()}円`);
+      reports.push(`自社ハード「${oh.name}」${net >= 0 ? '収益' : '維持費'} ${net >= 0 ? '+' : ''}${man(net)}`);
     }
   }
 
@@ -1241,7 +1250,7 @@ export function advanceWeek() {
       const income = ag.opeRate * ARCADE_INCOME;
       game.money += income;
       ag.weeksLeft -= 1;
-      reports.push(`アーケード「${ag.name}」インカム +${income.toLocaleString()}円`);
+      reports.push(`アーケード「${ag.name}」インカム +${man(income)}`);
     }
   }
 
@@ -1251,7 +1260,7 @@ export function advanceWeek() {
     const totalSalary = game.employees.reduce((s, e) => s + e.salary, 0);
     if (totalSalary > 0) {
       game.money -= totalSalary;
-      reports.push(`4月の年俸支払い ${totalSalary.toLocaleString()}円`);
+      reports.push(`4月の年俸支払い ${man(totalSalary)}`);
     }
   }
 
@@ -1271,7 +1280,7 @@ export function advanceWeek() {
   if (!game.gameOver && year() >= 3 && game.money < 100_000_000 && game.fame < 30 && Math.random() < 0.02) {
     const defense = 30_000_000;
     game.money -= defense;
-    reports.push(`大手企業が当社の買収を仕掛けてきました！防衛に奔走（防衛費 ${defense.toLocaleString()}円）`);
+    reports.push(`大手企業が当社の買収を仕掛けてきました！防衛に奔走（防衛費 ${man(defense)}）`);
   }
 
   // 年1回のゲームデックス（9月）
@@ -1378,7 +1387,7 @@ export function peekSlot(slot: number): string {
     const w = d.week ?? 1;
     const y = START_YEAR + Math.floor((w - 1) / WEEKS_PER_YEAR);
     const m = Math.floor(((w - 1) % WEEKS_PER_YEAR) / 4) + 1;
-    return `${y}年${m}月 / 資金 ¥${Number(d.money ?? 0).toLocaleString()} / 知名度 ${d.fame ?? 0}`;
+    return `${y}年${m}月 / 資金 ${man(Number(d.money ?? 0))} / 知名度 ${d.fame ?? 0}`;
   } catch {
     return '空き';
   }

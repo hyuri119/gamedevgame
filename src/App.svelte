@@ -41,6 +41,7 @@
     hwName,
     devTarget,
     hardwarePower,
+    man,
     restock,
     disposeCatalog,
     unitCost,
@@ -188,7 +189,7 @@
   <header>
     <h1>ゲーム会社経営シミュレーション</h1>
     <div class="bar">
-      <span class="money">資金: ¥{game.money.toLocaleString()}</span>
+      <span class="money">資金: {man(game.money)}</span>
       <span>{year()}年 {month()}月 {weekOfMonth}週目</span>
       <span>累計販売: {game.totalSales.toLocaleString()}本</span>
       <span>知名度: {game.fame}</span>
@@ -327,14 +328,14 @@
               <label>
                 販売先
                 <select bind:value={shipStores[s.id]}>
-                  <option value="">店頭（1本生産費 ¥{unitCost(s.completed!.hardwareId).toLocaleString()}）</option>
+                  <option value="">店頭（1本生産費 {man(unitCost(s.completed!.hardwareId))}）</option>
                   {#each availableStores(s.completed!.hardwareId) as st}
                     <option value={st.id}>{st.name}（DL・生産費0・手数料{Math.round(st.commission * 100)}%・売上×{st.reachMul}）</option>
                   {/each}
                 </select>
               </label>
               {#if shipQtys[s.id] > 0}
-                <span>生産費計 ¥{((shipStores[s.id] ? 0 : unitCost(s.completed!.hardwareId)) * shipQtys[s.id]).toLocaleString()}</span>
+                <span>生産費計 {man((shipStores[s.id] ? 0 : unitCost(s.completed!.hardwareId)) * shipQtys[s.id])}</span>
               {/if}
               <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id, shipStores[s.id] || undefined)}>出荷する</button>
               <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
@@ -694,7 +695,7 @@
               <td>{g.inventory.toLocaleString()}本</td>
               <td>{g.soldTotal.toLocaleString()}本</td>
               <td>{g.reviewScore}点</td>
-              <td>¥{unitCost(g.hardwareId).toLocaleString()}</td>
+              <td>{man(unitCost(g.hardwareId))}</td>
               <td>
                 <input class="qty" type="number" bind:value={restockQtys[i]} min="0" placeholder={String(Math.floor(Math.min(g.expectedSales * 0.2, shipCap())))} />
                 <button onclick={() => restock(i, restockQtys[i] || 0)} disabled={!(restockQtys[i] > 0)}>再出荷</button>
@@ -763,7 +764,7 @@
 
   {#if decksEvent}
     <Modal title="ゲームデックス（9月）" onclose={closeDecks}>
-      <p>出展する作品を選んでください（1作品につき出展費 {(5000000).toLocaleString()}円・知名度アップ）。</p>
+      <p>出展する作品を選んでください（1作品につき出展費 {man(5000000)}・知名度アップ）。</p>
       <h3>発売前の作品</h3>
       {#each deckPreRelease as s (s.id)}
         <div class="prow">
