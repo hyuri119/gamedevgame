@@ -200,6 +200,7 @@ const initialState = {
   contestYear: 0,
   grandPrix: 0,
   releasedGames: [] as { name: string; sold: number; reviewScore: number; year: number }[],
+  hallOfFame: [] as CompletedGame[],
   totalSales: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
@@ -991,10 +992,10 @@ export function saveGame() {
 }
 
 export function loadGame(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return false;
   try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return false;
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
     Object.assign(game, JSON.parse(raw));
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
