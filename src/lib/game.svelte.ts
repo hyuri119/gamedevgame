@@ -1,6 +1,7 @@
 import { hardware, kumiawase } from './data';
 import employeesData from '../../data/employees.json';
 import tenantsData from '../../data/tenants.json';
+import technologiesData from '../../data/technologies.json';
 
 export interface Employee {
   id: string;
@@ -72,6 +73,14 @@ export interface Tenant {
 }
 export const tenantCatalog: Tenant[] = tenantsData.tenants;
 
+export interface Technology {
+  id: string;
+  name: string;
+  effect: string;
+  cost: number;
+}
+export const techCatalog: Technology[] = technologiesData.technologies;
+
 function findHardware(id: string) {
   return hardware.hardware.find((h) => h.id === id);
 }
@@ -86,8 +95,8 @@ function compatCoeff(genre: string, content: string): number {
 
 function productionCost(hw: ReturnType<typeof findHardware>): number {
   const media = (hw?.media ?? []).join('');
-  if (media.includes('カセット')) return 1000;
-  return 300;
+  const base = media.includes('カセット') ? 1000 : 300;
+  return hasTech('compress') ? Math.round(base * 0.7) : base;
 }
 
 // その年のハード普及台数（発売から時間とともに寿命台数へ成長していく）
@@ -116,8 +125,12 @@ const initialState = {
   totalSales: 0, // 累計販売本数
   fame: 0, // 知名度 0〜100
   tenants: [] as string[],
+  techs: [] as string[],
   yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
   contestYear: 0,
+  grandPrix: 0, // グランプリ受賞回数
+  releasedGames: [] as { name: string; sold: number; reviewScore: number; year: number }[],
+  currentSold: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
   salaryYear: 0,
@@ -164,6 +177,47 @@ export function shipCap(): number {
 
 function licenseFeeMultiplier(): number {
   return hasTenant('lawyer') ? 0.7 : 1.0;
+}
+
+export function hasTech(id: string): boolean {
+  return game.techs.includes(id);
+}
+
+export function buyTech(id: string) {
+  const t = techCatalog.find((x) => x.id === id);
+  if (!t) return;
+  if (hasTech(id)) return;
+  if (game.money < t.cost) {
+    game.lastReport = `研究費用が足りません（${t.name} は ${t.cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= t.cost;
+  game.techs.push(id);
+  game.lastReport = `テクノロジー「${t.name}」を取得しました（${t.effect}）`;
+}
+
+// 社員の教育（能力・レベルアップ。年俸も上がる）
+export function train(id: string) {
+  const emp = game.employees.find((e) => e.id === id);
+  if (!emp) return;
+  if (emp.level >= 10) {
+    game.lastReport = `${emp.name} はレベル上限です`;
+    return;
+  }
+  const cost = emp.level * 5_000_000;
+  if (game.money < cost) {
+    game.lastReport = `教育費用が足りません（${cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= cost;
+  emp.fun = Math.min(100, emp.fun + 5);
+  emp.creativity = Math.min(100, emp.creativity + 5);
+  emp.graphics = Math.min(100, emp.graphics + 5);
+  emp.music = Math.min(100, emp.music + 5);
+  emp.speed = Math.min(100, emp.speed + 3);
+  emp.salary = Math.round(emp.salary * 1.15);
+  emp.level += 1;
+  game.lastReport = `${emp.name} を教育しました（Lv ${emp.level - 1} → ${emp.level}、年俸 ${(emp.salary / 10000).toLocaleString()}万円に上昇）`;
 }
 
 export function hire(id: string) {
@@ -267,6 +321,7 @@ export function ship(quantity: number) {
   }
   game.money -= cost;
   game.inventory = q;
+  game.currentSold = 0;
   game.onSale = { ...game.completed, weeksOnSale: 0 };
   game.completed = null;
   game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円）`;
@@ -355,6 +410,7 @@ function holdContest(): string | null {
   if (best.reviewScore >= 36) {
     fame += 15;
     prize += 50_000_000;
+    game.grandPrix += 1;
     msgs.push(`全日本ゲームコンテスト: 「${best.name}」がグランプリ受賞！`);
   } else if (best.reviewScore >= 30) {
     fame += 8;
@@ -395,14 +451,16 @@ export function advanceWeek() {
     const d = game.dev;
     const speed = game.employees.reduce((s, e) => s + e.speed, 0);
     if (d.stage === '開発') {
-      d.progress += speed / 12;
+      const devSpeed = hasTech('fast_dev') ? 1.2 : 1.0;
+      d.progress += (speed / 12) * devSpeed;
       d.bug += Math.random() * 1.5;
       if (d.progress >= DEV_TARGET) {
         d.stage = 'バグ取り';
         reports.push(`「${d.name}」の開発が完了しました。バグ取りをして完成させましょう（バグ ${Math.floor(d.bug)}）`);
       }
     } else {
-      d.bug = Math.max(0, d.bug - (speed / 12) * 0.6);
+      const fixSpeed = hasTech('bug_analysis') ? 2.0 : 1.0;
+      d.bug = Math.max(0, d.bug - (speed / 12) * 0.6 * fixSpeed);
     }
   }
 
@@ -418,6 +476,7 @@ export function advanceWeek() {
       game.money += revenue;
       game.inventory -= sold;
       game.totalSales += sold;
+      game.currentSold += sold;
       reports.push(`「${game.onSale.name}」を ${sold.toLocaleString()}本 販売（+${revenue.toLocaleString()}円）`);
     }
     if (w >= 6 || game.inventory === 0) {
@@ -430,8 +489,15 @@ export function advanceWeek() {
           reports.push(`「${game.onSale.name}」の売れ残り ${game.inventory.toLocaleString()}本を処分`);
         }
       }
+      game.releasedGames.push({
+        name: game.onSale.name,
+        sold: game.currentSold,
+        reviewScore: game.onSale.reviewScore,
+        year: currentYear()
+      });
       game.inventory = 0;
       game.onSale = null;
+      game.currentSold = 0;
     }
   }
 

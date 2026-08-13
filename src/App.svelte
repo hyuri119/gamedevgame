@@ -8,6 +8,7 @@
     advanceWeek,
     hire,
     fire,
+    train,
     startDev,
     startSequel,
     ship,
@@ -19,6 +20,9 @@
     hasTenant,
     shipCap,
     tenantCatalog,
+    buyTech,
+    hasTech,
+    techCatalog,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -74,6 +78,18 @@
                 : '開発を始めよう'
   );
 
+  const ranking = $derived([...game.releasedGames].sort((a, b) => b.sold - a.sold));
+
+  const achievements = $derived([
+    { label: '累計販売10万本', done: game.totalSales >= 100000 },
+    { label: '累計販売100万本', done: game.totalSales >= 1000000 },
+    { label: '累計販売1000万本', done: game.totalSales >= 10000000 },
+    { label: '殿堂入り1本', done: game.hallOfFame.length >= 1 },
+    { label: 'グランプリ受賞', done: game.grandPrix >= 1 },
+    { label: '知名度50', done: game.fame >= 50 },
+    { label: 'テナント3つ', done: game.tenants.length >= 3 }
+  ]);
+
   function onStartDev() {
     const hwId = devHardware || availableHardware[0]?.id;
     if (!hwId) return;
@@ -124,7 +140,10 @@
             <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
             <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
             <td>{e.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
-            <td><button onclick={() => fire(e.id)}>解雇</button></td>
+            <td>
+              <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
+              <button onclick={() => fire(e.id)}>解雇</button>
+            </td>
           </tr>
         {/each}
       </tbody>
@@ -264,6 +283,62 @@
   </section>
 
   <section>
+    <h2>テクノロジー</h2>
+    <table>
+      <thead>
+        <tr><th>技術</th><th>効果</th><th>費用</th><th></th></tr>
+      </thead>
+      <tbody>
+        {#each techCatalog as t (t.id)}
+          <tr>
+            <td>{t.name}</td>
+            <td>{t.effect}</td>
+            <td>{(t.cost / 10000).toLocaleString()}万</td>
+            <td>
+              {#if hasTech(t.id)}
+                取得済み
+              {:else}
+                <button onclick={() => buyTech(t.id)}>研究</button>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </section>
+
+  {#if ranking.length > 0}
+    <section>
+      <h2>売上ランキング</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>タイトル</th><th>販売本数</th><th>レビュー</th><th>年</th></tr>
+        </thead>
+        <tbody>
+          {#each ranking as g, i (g.name + g.year)}
+            <tr>
+              <td>{i + 1}</td>
+              <td>{g.name}</td>
+              <td>{g.sold.toLocaleString()}</td>
+              <td>{g.reviewScore}点</td>
+              <td>{g.year}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </section>
+  {/if}
+
+  <section>
+    <h2>実績</h2>
+    <ul class="ach">
+      {#each achievements as a}
+        <li class:done={a.done}>{a.done ? '達成' : '未達成'}: {a.label}</li>
+      {/each}
+    </ul>
+  </section>
+
+  <section>
     <h2>参入可能ハード（{currentYear()}年）</h2>
     <ul class="hw">
       {#each availableHardware as h}
@@ -361,5 +436,16 @@
   }
   .hw {
     font-size: 0.85rem;
+  }
+  .ach {
+    list-style: none;
+    padding: 0;
+    font-size: 0.9rem;
+  }
+  .ach li.done {
+    color: #0a7a0a;
+  }
+  .ach li {
+    color: #999;
   }
 </style>

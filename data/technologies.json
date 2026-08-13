@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "title": "テクノロジー",
+    "note": "§3.5。会社全体に効く研究開発。購入で恒久効果（要領圧縮が最重要）。"
+  },
+  "technologies": [
+    { "id": "compress", "name": "要領圧縮", "effect": "生産費用を30%引き下げ", "cost": 30000000 },
+    { "id": "fast_dev", "name": "高速開発", "effect": "開発速度 +20%", "cost": 20000000 },
+    { "id": "bug_analysis", "name": "バグ解析", "effect": "バグ取り速度 2倍", "cost": 15000000 }
+  ]
+}
