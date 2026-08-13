@@ -1,13 +1,13 @@
 <script lang="ts">
   import {
     game,
-    employeePool,
     year,
     month,
     currentYear,
     advanceWeek,
     hire,
     fire,
+    scout,
     train,
     evolve,
     canEvolve,
@@ -28,15 +28,15 @@
     techLevel,
     techDesc,
     techCatalog,
-    startHardware,
-    canDevelopHardware,
-    hwName,
-    startArcade,
-    finishArcade,
-    portArcade,
     buyLicense,
     hasLicense,
     licenseCost,
+    startArcade,
+    finishArcade,
+    portArcade,
+    startHardware,
+    canDevelopHardware,
+    hwName,
     restock,
     disposeCatalog,
     availableContracts,
@@ -47,6 +47,7 @@
   } from './lib/game.svelte';
   import { hardware, kumiawase, availableGenres, availableContents } from './lib/data';
   import OfficeCanvas from './lib/OfficeCanvas.svelte';
+  import Modal from './lib/Modal.svelte';
 
   const weekOfMonth = $derived(((game.week - 1) % 4) + 1);
 
@@ -66,11 +67,12 @@
   const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
   const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
-  const hiredIds = $derived(new Set(game.employees.map((e) => e.id)));
-  const pool = $derived(employeePool.filter((e) => !hiredIds.has(e.id)));
-
   const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.onSale));
   const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.onSale));
+  const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
+
+  // モーダル状態
+  let activeTab = $state('');
 
   // 新規開発フォーム
   let devName = $state('私のゲーム');
@@ -97,7 +99,6 @@
   let hwPower = $state(5);
 
   // アーケード開発フォーム
-  const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
   let arcName = $state('');
   let arcGenre = $state('');
   let arcContent = $state('');
@@ -109,6 +110,9 @@
     if (!arcadeBoards.some((b) => b.id === arcBoard)) arcBoard = arcadeBoards[0]?.id ?? '';
   });
 
+  // 出荷（スタジオごと）
+  let shipQtys = $state<Record<number, number>>({});
+
   // 自動進行（放置）
   let auto = $state(false);
   let autoSpeed = $state(1);
@@ -119,14 +123,11 @@
     return () => clearInterval(t);
   });
 
-  // 出荷（スタジオごと）
-  let shipQtys = $state<Record<number, number>>({});
-
   const hint = $derived(
     game.gameOver
       ? 'ゲームオーバー（ブラウザをリロードで再挑戦）'
       : game.employees.length === 0
-        ? 'まず社員を雇用しよう'
+        ? 'まず社員をスカウトしよう'
         : licensedHardware.length === 0 && game.ownHardware.length === 0
           ? 'ハードのライセンスを取得しよう'
           : busyStudios.length > 0
@@ -142,6 +143,7 @@
   }
 
   const empName = (id: string | null) => (id ? game.employees.find((e) => e.id === id)?.name ?? '?' : '');
+
   const ranking = $derived([...game.catalog].sort((a, b) => b.soldTotal - a.soldTotal));
 
   const achievements = $derived([
@@ -167,21 +169,23 @@
       <span>スタジオ: {game.studios.length}</span>
     </div>
     <p class="hint">▶ 次にやること: {hint}</p>
+    <div class="controls">
+      <button onclick={advanceWeek} disabled={game.gameOver}>次の週へ ▶</button>
+      <button onclick={() => (auto = !auto)} disabled={game.gameOver}>{auto ? '⏸ 停止' : '▶ 自動進行'}</button>
+      {#if auto}
+        <select bind:value={autoSpeed}>
+          <option value={1}>1x</option>
+          <option value={2}>2x</option>
+          <option value={5}>5x</option>
+        </select>
+      {/if}
+      <button onclick={saveGame}>セーブ</button>
+      <button onclick={resetGame}>リセット</button>
+    </div>
+    <p class="report">{game.lastReport}</p>
     {#if game.gameOver}
       <p class="gameover">破産しました（ゲームオーバー）</p>
     {/if}
-    <button onclick={advanceWeek} disabled={game.gameOver}>次の週へ ▶</button>
-    <button onclick={() => (auto = !auto)} disabled={game.gameOver}>{auto ? '⏸ 停止' : '▶ 自動進行'}</button>
-    {#if auto}
-      <select bind:value={autoSpeed}>
-        <option value={1}>1x</option>
-        <option value={2}>2x</option>
-        <option value={5}>5x</option>
-      </select>
-    {/if}
-    <button onclick={saveGame}>セーブ</button>
-    <button onclick={resetGame}>リセット</button>
-    <p class="report">{game.lastReport}</p>
   </header>
 
   <section>
@@ -189,398 +193,400 @@
     <OfficeCanvas />
   </section>
 
-  <section>
-    <h2>社員（{game.employees.length}人）</h2>
-    {#if game.employees.length === 0}
-      <p>まだ誰もいません。下の候補から雇用してください。</p>
-    {/if}
-    <table>
-      <thead>
-        <tr>
-          <th>名前</th><th>役職</th><th>Lv</th>
-          <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each game.employees as e (e.id)}
-          <tr>
-            <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
-            <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
-            <td>{e.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
-            <td>
-              <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
-              {#if canEvolve(e)}
-                <button onclick={() => evolve(e.id)}>進化</button>
-              {/if}
-              <button onclick={() => fire(e.id)}>解雇</button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+  <nav class="ribbon">
+    <button onclick={() => (activeTab = 'dev')}>開発</button>
+    <button onclick={() => (activeTab = 'staff')}>社員（{game.employees.length}）</button>
+    <button onclick={() => (activeTab = 'studio')}>スタジオ（{game.studios.length}）</button>
+    <button onclick={() => (activeTab = 'contract')}>受注</button>
+    <button onclick={() => (activeTab = 'arcade')}>アーケード</button>
+    <button onclick={() => (activeTab = 'hw')}>自社ハード</button>
+    <button onclick={() => (activeTab = 'manage')}>経営</button>
+    <button onclick={() => (activeTab = 'catalog')}>カタログ（{game.catalog.length}）</button>
+    <button onclick={() => (activeTab = 'ach')}>実績</button>
+  </nav>
 
-    <h3>雇用候補</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>名前</th><th>役職</th><th>Lv</th>
-          <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th>
-          <th>契約金</th><th>年俸</th><th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each pool as e (e.id)}
-          <tr>
-            <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
-            <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
-            <td>{e.speed}</td>
-            <td>{(e.contract / 10000).toLocaleString()}万</td>
-            <td>{(e.salary / 10000).toLocaleString()}万</td>
-            <td><button onclick={() => hire(e.id)}>雇用</button></td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </section>
-
-  <section>
-    <h2>スタジオ（{game.studios.length}/5）</h2>
-
-    {#each game.studios as s (s.id)}
-      <div class="studio">
-        <h3>{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</h3>
-        {#if s.dev}
-          {#if s.dev.stage === '開発'}
-            <p>開発中: 「{s.dev.name}」({s.dev.genre} × {s.dev.content} / {hwName(s.dev.hardwareId)})</p>
-            <progress value={Math.min(100, s.dev.progress / 2)} max={100}></progress>
-            <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
-            <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
-              {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+  {#if activeTab === 'dev'}
+    <Modal title="開発" onclose={() => (activeTab = '')}>
+      {#each game.studios as s (s.id)}
+        <div class="studio">
+          <h4>{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</h4>
+          {#if s.dev}
+            {#if s.dev.stage === '開発'}
+              <p>開発中: 「{s.dev.name}」({s.dev.genre} × {s.dev.content} / {hwName(s.dev.hardwareId)})</p>
+              <progress value={Math.min(100, s.dev.progress / 2)} max={100}></progress>
+              <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
+              <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
+                {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+              </button>
+            {:else}
+              <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
+              <button onclick={() => finishGame(s.id)}>完成する</button>
+              <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
+                {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+              </button>
+            {/if}
+          {:else if s.completed}
+            <p>完成: 「{s.completed.name}」 レビュー {s.completed.reviewScore}点
+              {#if s.completed.hallOfFame}<strong>（殿堂入り！）</strong>{/if}
+            </p>
+            <ul>
+              <li>おもしろさ {s.completed.fun} / 独創性 {s.completed.creativity}</li>
+              <li>グラフィック {s.completed.graphics} / 音楽 {s.completed.music} / バグ {s.completed.bug}</li>
+              <li>期待売上 約 {s.completed.expectedSales.toLocaleString()}本</li>
+            </ul>
+            <div class="ship">
+              <label>
+                出荷本数（上限 {shipCap().toLocaleString()}本）:
+                <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed.expectedSales, shipCap()))} />
+              </label>
+              <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id)}>出荷する</button>
+              <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
+            </div>
+            <button onclick={() => exhibitGame(s.id)} disabled={s.completed.exhibited}>
+              {s.completed.exhibited ? '出展済み' : 'ゲームデックスに出展'}
             </button>
+          {:else if s.onSale}
+            <p>販売中: 「{s.onSale.name}」在庫 {s.inventory.toLocaleString()}本（{s.onSale.weeksOnSale}週目）</p>
           {:else}
-            <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
-            <button onclick={() => finishGame(s.id)}>完成する</button>
-            <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
-              {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
-            </button>
+            <p>空き（開発待ち）</p>
           {/if}
-        {:else if s.completed}
-          <p>完成: 「{s.completed.name}」 レビュー {s.completed.reviewScore}点
-            {#if s.completed.hallOfFame}<strong>（殿堂入り！）</strong>{/if}
-          </p>
-          <ul>
-            <li>おもしろさ {s.completed.fun} / 独創性 {s.completed.creativity}</li>
-            <li>グラフィック {s.completed.graphics} / 音楽 {s.completed.music} / バグ {s.completed.bug}</li>
-            <li>期待売上 約 {s.completed.expectedSales.toLocaleString()}本</li>
-          </ul>
-          <div class="ship">
-            <label>
-              出荷本数（上限 {shipCap().toLocaleString()}本）:
-              <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed.expectedSales, shipCap()))} />
-            </label>
-            <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id)}>出荷する</button>
-            <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
-          </div>
-          <button onclick={() => exhibitGame(s.id)} disabled={s.completed.exhibited}>
-            {s.completed.exhibited ? '出展済み' : 'ゲームデックスに出展'}
-          </button>
-        {:else if s.onSale}
-          <p>販売中: 「{s.onSale.name}」在庫 {s.inventory.toLocaleString()}本（{s.onSale.weeksOnSale}週目）</p>
-        {:else}
-          <p>空き（開発待ち）</p>
-        {/if}
-      </div>
-    {/each}
+        </div>
+      {/each}
 
-    <div class="studio-form">
-      <h3>新スタジオ発足（3億円・責任者Lv5以上）</h3>
-      <label>スタジオ名 <input type="text" bind:value={studioName} placeholder="スタジオ名" /></label>
-      <label>
-        責任者
-        <select bind:value={studioLead}>
-          <option value="">選択してください</option>
-          {#each game.employees.filter((e) => e.level >= 5) as e (e.id)}
-            <option value={e.id}>{e.name}（Lv{e.level}）</option>
-          {/each}
-        </select>
-      </label>
-      <button onclick={() => foundStudio(studioName || '新スタジオ', studioLead)}>発足する</button>
-      <button onclick={acquireCompany}>他社を買収（8億円）</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>新規開発</h2>
-    {#if idleStudios.length === 0}
-      <p>空いているスタジオがありません。</p>
-    {:else}
-      <div class="devform">
-        <label>
-          スタジオ
-          <select bind:value={devStudio}>
-            {#each idleStudios as s}<option value={s.id}>{s.name}</option>{/each}
-          </select>
-        </label>
-        <label>タイトル <input type="text" bind:value={devName} /></label>
-        <label>
-          ジャンル（{genres.length}/{kumiawase.genres.length} 解放）
-          <select bind:value={devGenre}>
-            {#each genres as g}<option value={g}>{g}</option>{/each}
-          </select>
-        </label>
-        <label>
-          内容（{contents.length}/{kumiawase.contents.length} 解放）
-          <select bind:value={devContent}>
-            {#each contents as c}<option value={c}>{c}</option>{/each}
-          </select>
-        </label>
-        <label>
-          ハード
-          <select bind:value={devHardware}>
-            <option value="">（自動: 最初の1番目）</option>
-            {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
-            {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円）</option>{/each}
-          </select>
-        </label>
-        <p>相性: {compat}（{devGenre} × {devContent}）</p>
-        <button onclick={onStartDev}>開発を始める</button>
-      </div>
-    {/if}
-  </section>
-
-  <section>
-    <h2>自社ハード</h2>
-    {#if canDevelopHardware()}
-      {#if game.hwProject}
-        <p>
-          開発中: 「{game.hwProject.name}」（{game.hwProject.type} / 性能{game.hwProject.power}）
-          進捗 {Math.min(100, Math.floor((game.hwProject.progress / game.hwProject.target) * 100))}%
-        </p>
+      <h3>新規開発</h3>
+      {#if idleStudios.length === 0}
+        <p>空いているスタジオがありません。</p>
       {:else}
-        <div class="studio-form">
-          <label>機種名 <input type="text" bind:value={hwDevName} placeholder="機種名" /></label>
+        <div class="devform">
           <label>
-            種類
-            <select bind:value={hwType}>
-              <option value="家庭用">家庭用</option>
-              <option value="携帯型">携帯型</option>
+            スタジオ
+            <select bind:value={devStudio}>
+              {#each idleStudios as s}<option value={s.id}>{s.name}</option>{/each}
+            </select>
+          </label>
+          <label>タイトル <input type="text" bind:value={devName} /></label>
+          <label>
+            ジャンル（{genres.length}/{kumiawase.genres.length} 解放）
+            <select bind:value={devGenre}>
+              {#each genres as g}<option value={g}>{g}</option>{/each}
             </select>
           </label>
           <label>
-            性能（開発費＝性能×2億円）
-            <select bind:value={hwPower}>
-              {#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as p}<option value={p}>{p}</option>{/each}
+            内容（{contents.length}/{kumiawase.contents.length} 解放）
+            <select bind:value={devContent}>
+              {#each contents as c}<option value={c}>{c}</option>{/each}
             </select>
           </label>
-          <button onclick={() => startHardware(hwDevName || '自社機', hwType, hwPower)}>開発する</button>
+          <label>
+            ハード
+            <select bind:value={devHardware}>
+              <option value="">（自動: 最初の1番目）</option>
+              {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}）</option>{/each}
+              {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円）</option>{/each}
+            </select>
+          </label>
+          <p>相性: {compat}（{devGenre} × {devContent}）</p>
+          <button onclick={onStartDev}>開発を始める</button>
         </div>
       {/if}
-    {:else}
-      <p>ハードエンジニア（またはスーパーハッカー）を雇用すると自社ハードを開発できます。</p>
-    {/if}
-    {#if game.ownHardware.length > 0}
-      <ul class="hw">
-        {#each game.ownHardware as h}
-          <li>【自社】{h.name}（{h.type} / 性能 {h.params.power} / 普及見込み {Math.round(h.installBase / 10000)}万台）</li>
+    </Modal>
+  {/if}
+
+  {#if activeTab === 'staff'}
+    <Modal title="社員" onclose={() => (activeTab = '')}>
+      <h3>スカウト（雇用）</h3>
+      <button onclick={scout}>スカウトする（候補を探す）</button>
+      {#if game.scoutCandidates.length > 0}
+        <table>
+          <thead>
+            <tr>
+              <th>名前</th><th>役職</th><th>Lv</th>
+              <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th>
+              <th>契約金</th><th>年俸</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each game.scoutCandidates as e (e.id)}
+              <tr>
+                <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
+                <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
+                <td>{e.speed}</td>
+                <td>{(e.contract / 10000).toLocaleString()}万</td>
+                <td>{(e.salary / 10000).toLocaleString()}万</td>
+                <td><button onclick={() => hire(e.id)}>雇用</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <p>「スカウトする」を押すと候補が表示されます。</p>
+      {/if}
+
+      <h3>雇用済み社員（{game.employees.length}人）</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>名前</th><th>役職</th><th>Lv</th>
+            <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each game.employees as e (e.id)}
+            <tr>
+              <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
+              <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
+              <td>{e.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
+              <td>
+                <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
+                {#if canEvolve(e)}
+                  <button onclick={() => evolve(e.id)}>進化</button>
+                {/if}
+                <button onclick={() => fire(e.id)}>解雇</button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </Modal>
+  {/if}
+
+  {#if activeTab === 'studio'}
+    <Modal title="スタジオ" onclose={() => (activeTab = '')}>
+      <ul>
+        {#each game.studios as s (s.id)}
+          <li>{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</li>
         {/each}
       </ul>
-    {/if}
-  </section>
-
-  <section>
-    <h2>アーケード</h2>
-    {#if game.arcadeProject}
-      {#if game.arcadeProject.stage === '開発'}
-        <p>開発中: 「{game.arcadeProject.name}」（{game.arcadeProject.genre} × {game.arcadeProject.content} / {hwName(game.arcadeProject.boardId)}）</p>
-        <progress value={Math.min(100, game.arcadeProject.progress / 1.2)} max={100}></progress>
-        <p>進捗 {Math.min(100, Math.floor(game.arcadeProject.progress / 1.2))}% / バグ {Math.floor(game.arcadeProject.bug)}</p>
-      {:else}
-        <p>バグ取り中: 「{game.arcadeProject.name}」 バグ {Math.floor(game.arcadeProject.bug)}</p>
-        <button onclick={finishArcade}>完成する</button>
-      {/if}
-    {:else}
       <div class="devform">
-        <label>タイトル <input type="text" bind:value={arcName} /></label>
+        <h3>新スタジオ発足（3億円・責任者Lv5以上）</h3>
+        <label>スタジオ名 <input type="text" bind:value={studioName} placeholder="スタジオ名" /></label>
         <label>
-          ジャンル
-          <select bind:value={arcGenre}>
-            {#each genres as g}<option value={g}>{g}</option>{/each}
+          責任者
+          <select bind:value={studioLead}>
+            <option value="">選択してください</option>
+            {#each game.employees.filter((e) => e.level >= 5) as e (e.id)}
+              <option value={e.id}>{e.name}（Lv{e.level}）</option>
+            {/each}
           </select>
         </label>
-        <label>
-          内容
-          <select bind:value={arcContent}>
-            {#each contents as c}<option value={c}>{c}</option>{/each}
-          </select>
-        </label>
-        <label>
-          基板
-          <select bind:value={arcBoard}>
-            {#each arcadeBoards as b}<option value={b.id}>{b.name}</option>{/each}
-          </select>
-        </label>
-        <button onclick={() => startArcade(arcName || 'アーケード作品', arcGenre, arcContent, arcBoard)}>開発を始める</button>
+        <button onclick={() => foundStudio(studioName || '新スタジオ', studioLead)}>発足する</button>
+        <button onclick={acquireCompany}>他社を買収（8億円）</button>
       </div>
-    {/if}
+    </Modal>
+  {/if}
 
-    {#if game.arcadeGames.length > 0}
+  {#if activeTab === 'contract'}
+    <Modal title="受注開発（外注納品）" onclose={() => (activeTab = '')}>
+      {#if game.activeContract}
+        <p>
+          受注中: 「{game.activeContract.name}」（報酬 {(game.activeContract.reward / 10000).toLocaleString()}万円）
+          進捗 {Math.min(100, Math.floor((game.activeContract.progress / game.activeContract.target) * 100))}%
+          / 経過 {game.activeContract.elapsed}週（納期 {game.activeContract.deadline}週）
+        </p>
+        <progress value={Math.min(100, (game.activeContract.progress / game.activeContract.target) * 100)} max={100}></progress>
+        <button onclick={cancelContract}>キャンセル</button>
+      {:else}
+        <table>
+          <thead>
+            <tr><th>案件</th><th>報酬</th><th>納期</th><th>必要知名度</th><th></th></tr>
+          </thead>
+          <tbody>
+            {#each availableContracts() as c (c.id)}
+              <tr>
+                <td>{c.name}<div class="desc">{c.desc}</div></td>
+                <td>{(c.reward / 10000).toLocaleString()}万</td>
+                <td>{c.deadline}週</td>
+                <td>{c.minFame}</td>
+                <td><button onclick={() => acceptContract(c.id)}>受注</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </Modal>
+  {/if}
+
+  {#if activeTab === 'arcade'}
+    <Modal title="アーケード" onclose={() => (activeTab = '')}>
+      {#if game.arcadeProject}
+        {#if game.arcadeProject.stage === '開発'}
+          <p>開発中: 「{game.arcadeProject.name}」（{game.arcadeProject.genre} × {game.arcadeProject.content} / {hwName(game.arcadeProject.boardId)}）</p>
+          <progress value={Math.min(100, game.arcadeProject.progress / 1.2)} max={100}></progress>
+          <p>進捗 {Math.min(100, Math.floor(game.arcadeProject.progress / 1.2))}% / バグ {Math.floor(game.arcadeProject.bug)}</p>
+        {:else}
+          <p>バグ取り中: 「{game.arcadeProject.name}」 バグ {Math.floor(game.arcadeProject.bug)}</p>
+          <button onclick={finishArcade}>完成する</button>
+        {/if}
+      {:else}
+        <div class="devform">
+          <label>タイトル <input type="text" bind:value={arcName} /></label>
+          <label>
+            ジャンル
+            <select bind:value={arcGenre}>
+              {#each genres as g}<option value={g}>{g}</option>{/each}
+            </select>
+          </label>
+          <label>
+            内容
+            <select bind:value={arcContent}>
+              {#each contents as c}<option value={c}>{c}</option>{/each}
+            </select>
+          </label>
+          <label>
+            基板
+            <select bind:value={arcBoard}>
+              {#each arcadeBoards as b}<option value={b.id}>{b.name}</option>{/each}
+            </select>
+          </label>
+          <button onclick={() => startArcade(arcName || 'アーケード作品', arcGenre, arcContent, arcBoard)}>開発を始める</button>
+        </div>
+      {/if}
+
+      {#if game.arcadeGames.length > 0}
+        <table>
+          <thead>
+            <tr><th>タイトル</th><th>稼働率</th><th>残り週</th><th></th></tr>
+          </thead>
+          <tbody>
+            {#each game.arcadeGames as ag, i (ag.name + i)}
+              <tr>
+                <td>{ag.name}</td>
+                <td>{ag.opeRate}</td>
+                <td>{ag.weeksLeft > 0 ? `${ag.weeksLeft}週` : '稼働終了'}</td>
+                <td>
+                  {#if !ag.ported && ag.opeRate >= 60}
+                    <button onclick={() => portArcade(i)}>家庭用に移植</button>
+                  {:else if ag.ported}
+                    移植済み
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </Modal>
+  {/if}
+
+  {#if activeTab === 'hw'}
+    <Modal title="自社ハード" onclose={() => (activeTab = '')}>
+      {#if canDevelopHardware()}
+        {#if game.hwProject}
+          <p>
+            開発中: 「{game.hwProject.name}」（{game.hwProject.type} / 性能{game.hwProject.power}）
+            進捗 {Math.min(100, Math.floor((game.hwProject.progress / game.hwProject.target) * 100))}%
+          </p>
+        {:else}
+          <div class="devform">
+            <label>機種名 <input type="text" bind:value={hwDevName} placeholder="機種名" /></label>
+            <label>
+              種類
+              <select bind:value={hwType}>
+                <option value="家庭用">家庭用</option>
+                <option value="携帯型">携帯型</option>
+              </select>
+            </label>
+            <label>
+              性能（開発費＝性能×2億円）
+              <select bind:value={hwPower}>
+                {#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as p}<option value={p}>{p}</option>{/each}
+              </select>
+            </label>
+            <button onclick={() => startHardware(hwDevName || '自社機', hwType, hwPower)}>開発する</button>
+          </div>
+        {/if}
+      {:else}
+        <p>ハードエンジニア（またはスーパーハッカー）を雇用すると自社ハードを開発できます。</p>
+      {/if}
+      {#if game.ownHardware.length > 0}
+        <ul class="hw">
+          {#each game.ownHardware as h}
+            <li>【自社】{h.name}（{h.type} / 性能 {h.params.power} / 普及見込み {Math.round(h.installBase / 10000)}万台）</li>
+          {/each}
+        </ul>
+      {/if}
+    </Modal>
+  {/if}
+
+  {#if activeTab === 'manage'}
+    <Modal title="経営（施設・技術・ライセンス）" onclose={() => (activeTab = '')}>
+      <h3>テナント（{game.tenants.length}/3）</h3>
       <table>
         <thead>
-          <tr><th>タイトル</th><th>稼働率</th><th>残り週</th><th></th></tr>
+          <tr><th>施設</th><th>効果</th><th>費用</th><th></th></tr>
         </thead>
         <tbody>
-          {#each game.arcadeGames as ag, i (ag.name + i)}
+          {#each tenantCatalog as t (t.id)}
             <tr>
-              <td>{ag.name}</td>
-              <td>{ag.opeRate}</td>
-              <td>{ag.weeksLeft > 0 ? `${ag.weeksLeft}週` : '稼働終了'}</td>
+              <td>{t.name}</td>
+              <td>{t.effect}</td>
+              <td>{(t.cost / 10000).toLocaleString()}万</td>
               <td>
-                {#if !ag.ported && ag.opeRate >= 60}
-                  <button onclick={() => portArcade(i)}>家庭用に移植</button>
-                {:else if ag.ported}
-                  移植済み
+                {#if hasTenant(t.id)}
+                  導入済み
+                {:else}
+                  <button onclick={() => buyTenant(t.id)} disabled={game.tenants.length >= 3}>導入</button>
                 {/if}
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
-    {/if}
-  </section>
 
-  <section>
-    <h2>受注開発（外注納品）</h2>
-    {#if game.activeContract}
-      <p>
-        受注中: 「{game.activeContract.name}」（報酬 {(game.activeContract.reward / 10000).toLocaleString()}万円）
-        進捗 {Math.min(100, Math.floor((game.activeContract.progress / game.activeContract.target) * 100))}%
-        / 経過 {game.activeContract.elapsed}週（納期 {game.activeContract.deadline}週）
-      </p>
-      <progress value={Math.min(100, (game.activeContract.progress / game.activeContract.target) * 100)} max={100}></progress>
-      <button onclick={cancelContract}>キャンセル</button>
-    {:else}
+      <h3>テクノロジー</h3>
       <table>
         <thead>
-          <tr><th>案件</th><th>報酬</th><th>納期</th><th>必要知名度</th><th></th></tr>
+          <tr><th>技術</th><th>効果</th><th>費用</th><th></th></tr>
         </thead>
         <tbody>
-          {#each availableContracts() as c (c.id)}
+          {#each techCatalog as t (t.id)}
             <tr>
-              <td>{c.name}<div class="desc">{c.desc}</div></td>
-              <td>{(c.reward / 10000).toLocaleString()}万</td>
-              <td>{c.deadline}週</td>
-              <td>{c.minFame}</td>
-              <td><button onclick={() => acceptContract(c.id)}>受注</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-  </section>
-
-  {#if game.hallOfFame.length > 0}
-    <section>
-      <h2>殿堂入り（{game.hallOfFame.length}本）</h2>
-      <table>
-        <thead>
-          <tr><th>タイトル</th><th>レビュー</th><th>ハード</th><th></th></tr>
-        </thead>
-        <tbody>
-          {#each game.hallOfFame as h (h.name + h.reviewScore)}
-            <tr>
-              <td>{h.name}</td><td>{h.reviewScore}点</td><td>{hwName(h.hardwareId)}</td>
+              <td>{t.name}</td>
+              <td>{techDesc(t.id)}</td>
               <td>
-                {#if idleStudios.length > 0}
-                  <button onclick={() => startSequel(h, idleStudios[0].id)}>続編を開発</button>
+                {#if techLevel(t.id) >= t.maxLevel}
+                  MAX
+                {:else}
+                  {(t.costs[techLevel(t.id)] / 10000).toLocaleString()}万
+                {/if}
+              </td>
+              <td>
+                {#if techLevel(t.id) >= t.maxLevel}
+                  取得済み
+                {:else}
+                  <button onclick={() => buyTech(t.id)}>研究（Lv{techLevel(t.id) + 1}）</button>
                 {/if}
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
-    </section>
+
+      <h3>ライセンス取得</h3>
+      {#if unlicensedHardware.length === 0}
+        <p>取得可能なライセンスはありません。</p>
+      {:else}
+        <table>
+          <thead>
+            <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
+          </thead>
+          <tbody>
+            {#each unlicensedHardware as h}
+              <tr>
+                <td>{h.name}（{h.realName}）</td>
+                <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
+                <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </Modal>
   {/if}
 
-  <section>
-    <h2>テナント（{game.tenants.length}/3）</h2>
-    <table>
-      <thead>
-        <tr><th>施設</th><th>効果</th><th>費用</th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each tenantCatalog as t (t.id)}
-          <tr>
-            <td>{t.name}</td>
-            <td>{t.effect}</td>
-            <td>{(t.cost / 10000).toLocaleString()}万</td>
-            <td>
-              {#if hasTenant(t.id)}
-                導入済み
-              {:else}
-                <button onclick={() => buyTenant(t.id)} disabled={game.tenants.length >= 3}>導入</button>
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </section>
-
-  <section>
-    <h2>テクノロジー</h2>
-    <table>
-      <thead>
-        <tr><th>技術</th><th>効果</th><th>費用</th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each techCatalog as t (t.id)}
-          <tr>
-            <td>{t.name}</td>
-            <td>{techDesc(t.id)}</td>
-            <td>
-              {#if techLevel(t.id) >= t.maxLevel}
-                MAX
-              {:else}
-                {(t.costs[techLevel(t.id)] / 10000).toLocaleString()}万
-              {/if}
-            </td>
-            <td>
-              {#if techLevel(t.id) >= t.maxLevel}
-                取得済み
-              {:else}
-                <button onclick={() => buyTech(t.id)}>研究（Lv{techLevel(t.id) + 1}）</button>
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </section>
-
-  {#if ranking.length > 0}
-    <section>
-      <h2>売上ランキング</h2>
-      <table>
-        <thead>
-          <tr><th>#</th><th>タイトル</th><th>累計販売本数</th><th>レビュー</th></tr>
-        </thead>
-        <tbody>
-          {#each ranking as g, i (g.name)}
-            <tr>
-              <td>{i + 1}</td>
-              <td>{g.name}</td>
-              <td>{g.soldTotal.toLocaleString()}</td>
-              <td>{g.reviewScore}点</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
-  {/if}
-
-  {#if game.catalog.length > 0}
-    <section>
-      <h2>カタログ（継続販売）</h2>
+  {#if activeTab === 'catalog'}
+    <Modal title="カタログ（継続販売）" onclose={() => (activeTab = '')}>
+      <h3>継続販売中の作品</h3>
       <table>
         <thead>
           <tr><th>タイトル</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th></th></tr>
@@ -602,57 +608,39 @@
           {/each}
         </tbody>
       </table>
-    </section>
+
+      <h3>売上ランキング</h3>
+      {#if ranking.length > 0}
+        <table>
+          <thead>
+            <tr><th>#</th><th>タイトル</th><th>累計販売本数</th><th>レビュー</th></tr>
+          </thead>
+          <tbody>
+            {#each ranking as g, i (g.name)}
+              <tr>
+                <td>{i + 1}</td>
+                <td>{g.name}</td>
+                <td>{g.soldTotal.toLocaleString()}</td>
+                <td>{g.reviewScore}点</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <p>まだ発売した作品がありません。</p>
+      {/if}
+    </Modal>
   {/if}
 
-  <section>
-    <h2>実績</h2>
-    <ul class="ach">
-      {#each achievements as a}
-        <li class:done={a.done}>{a.done ? '達成' : '未達成'}: {a.label}</li>
-      {/each}
-    </ul>
-  </section>
-
-  {#if unlicensedHardware.length > 0}
-    <section>
-      <h2>ライセンス取得</h2>
-      <p>ハード向けに開発するにはライセンスが必要です。</p>
-      <table>
-        <thead>
-          <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
-        </thead>
-        <tbody>
-          {#each unlicensedHardware as h}
-            <tr>
-              <td>{h.name}（{h.realName}）</td>
-              <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
-              <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
+  {#if activeTab === 'ach'}
+    <Modal title="実績" onclose={() => (activeTab = '')}>
+      <ul class="ach">
+        {#each achievements as a}
+          <li class:done={a.done}>{a.done ? '達成' : '未達成'}: {a.label}</li>
+        {/each}
+      </ul>
+    </Modal>
   {/if}
-
-  <section>
-    <h2>参入可能ハード（{currentYear()}年）</h2>
-    <ul class="hw">
-      {#each availableHardware as h}
-        <li>
-          {h.name}（{h.realName} / 現在の普及 {Math.round(effectiveInstallBase(h.id, currentYear()) / 10000)}万台 /
-          最終 {Math.round((h.installBase ?? 0) / 10000)}万台 / 性能 {h.params?.power ?? '?'}）
-          {hasLicense(h.id) ? '［取得済み］' : '［要ライセンス］'}
-        </li>
-      {/each}
-      {#each game.ownHardware as h}
-        <li>
-          【自社】{h.name}（性能 {h.params.power} / 現在の普及 {Math.round(effectiveInstallBase(h.id, currentYear()) / 10000)}万台 /
-          最終 {Math.round(h.installBase / 10000)}万台 / ライセンス0円）
-        </li>
-      {/each}
-    </ul>
-  </section>
 </main>
 
 <style>
@@ -669,7 +657,7 @@
   header {
     border-bottom: 2px solid #ccc;
     padding-bottom: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
   .bar {
     display: flex;
@@ -688,6 +676,13 @@
     padding: 6px 10px;
     font-weight: bold;
   }
+  .controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
   .gameover {
     color: #c00;
     font-weight: bold;
@@ -696,12 +691,23 @@
     color: #555;
     font-size: 0.9rem;
   }
+  .ribbon {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .ribbon button {
+    font-size: 0.95rem;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
   section {
     background: #fff;
     border: 1px solid #ddd;
     border-radius: 6px;
     padding: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
   .studio {
     border: 1px solid #ccc;
@@ -709,7 +715,7 @@
     padding: 8px 12px;
     margin-bottom: 10px;
   }
-  .studio h3 {
+  .studio h4 {
     margin: 0 0 6px;
     font-size: 1rem;
   }
@@ -717,6 +723,7 @@
     border-collapse: collapse;
     width: 100%;
     font-size: 0.85rem;
+    margin: 8px 0;
   }
   th,
   td {
@@ -731,15 +738,13 @@
   button {
     cursor: pointer;
   }
-  .devform,
-  .studio-form {
+  .devform {
     display: flex;
     flex-direction: column;
     gap: 8px;
     max-width: 480px;
   }
-  .devform label,
-  .studio-form label {
+  .devform label {
     display: flex;
     justify-content: space-between;
     gap: 8px;

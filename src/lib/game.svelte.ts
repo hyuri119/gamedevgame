@@ -227,6 +227,7 @@ const initialState = {
   money: 100_000_000,
   week: 13, // 4月スタート（1983年4月）
   employees: [] as Employee[],
+  scoutCandidates: [] as Employee[],
   fame: 0,
   tenants: [] as string[],
   techs: {} as Record<string, number>,
@@ -415,7 +416,20 @@ export function hire(id: string) {
   }
   game.money -= emp.contract;
   game.employees.push({ ...emp });
+  game.scoutCandidates = game.scoutCandidates.filter((c) => c.id !== id);
   game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${emp.contract.toLocaleString()}円）`;
+}
+
+// スカウト（雇用候補をランダムに数人提示）
+export function scout() {
+  const unhired = employeePool.filter((e) => !game.employees.some((h) => h.id === e.id));
+  const shuffled = [...unhired].sort(() => Math.random() - 0.5);
+  game.scoutCandidates = shuffled.slice(0, 4);
+  if (game.scoutCandidates.length === 0) {
+    game.lastReport = '雇用できる候補がいません';
+  } else {
+    game.lastReport = `${game.scoutCandidates.length}人の候補が見つかりました`;
+  }
 }
 
 export function fire(id: string) {
