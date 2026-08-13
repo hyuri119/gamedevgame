@@ -2,6 +2,7 @@ import { hardware, kumiawase } from './data';
 import employeesData from '../../data/employees.json';
 import tenantsData from '../../data/tenants.json';
 import technologiesData from '../../data/technologies.json';
+import rolesData from '../../data/roles.json';
 
 export interface Employee {
   id: string;
@@ -76,10 +77,13 @@ export const tenantCatalog: Tenant[] = tenantsData.tenants;
 export interface Technology {
   id: string;
   name: string;
-  effect: string;
-  cost: number;
+  maxLevel: number;
+  costs: number[];
+  desc: string[];
 }
 export const techCatalog: Technology[] = technologiesData.technologies;
+
+const roles = rolesData.roles as Record<string, { to: string; level: number }>;
 
 function findHardware(id: string) {
   return hardware.hardware.find((h) => h.id === id);
@@ -96,7 +100,7 @@ function compatCoeff(genre: string, content: string): number {
 function productionCost(hw: ReturnType<typeof findHardware>): number {
   const media = (hw?.media ?? []).join('');
   const base = media.includes('カセット') ? 1000 : 300;
-  return hasTech('compress') ? Math.round(base * 0.7) : base;
+  return Math.round(base * (1 - 0.1 * techLevel('compress')));
 }
 
 // その年のハード普及台数（発売から時間とともに寿命台数へ成長していく）
@@ -125,7 +129,7 @@ const initialState = {
   totalSales: 0, // 累計販売本数
   fame: 0, // 知名度 0〜100
   tenants: [] as string[],
-  techs: [] as string[],
+  techs: {} as Record<string, number>,
   yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
   contestYear: 0,
   grandPrix: 0, // グランプリ受賞回数
@@ -179,24 +183,66 @@ function licenseFeeMultiplier(): number {
   return hasTenant('lawyer') ? 0.7 : 1.0;
 }
 
-export function hasTech(id: string): boolean {
-  return game.techs.includes(id);
+export function techLevel(id: string): number {
+  return game.techs[id] ?? 0;
+}
+
+export function techDesc(id: string): string {
+  const t = techCatalog.find((x) => x.id === id);
+  const lv = techLevel(id);
+  if (!t) return '';
+  return lv === 0 ? '未取得' : t.desc[lv - 1];
 }
 
 export function buyTech(id: string) {
   const t = techCatalog.find((x) => x.id === id);
   if (!t) return;
-  if (hasTech(id)) return;
-  if (game.money < t.cost) {
-    game.lastReport = `研究費用が足りません（${t.name} は ${t.cost.toLocaleString()}円 必要）`;
+  const lv = techLevel(id);
+  if (lv >= t.maxLevel) return;
+  const cost = t.costs[lv];
+  if (game.money < cost) {
+    game.lastReport = `研究費用が足りません（${t.name} Lv${lv + 1} は ${cost.toLocaleString()}円 必要）`;
     return;
   }
-  game.money -= t.cost;
-  game.techs.push(id);
-  game.lastReport = `テクノロジー「${t.name}」を取得しました（${t.effect}）`;
+  game.money -= cost;
+  game.techs[id] = lv + 1;
+  game.lastReport = `テクノロジー「${t.name}」を Lv${lv + 1} に（${t.desc[lv]}）`;
 }
 
-// 社員の教育（能力・レベルアップ。年俸も上がる）
+// 社員の職業進化（指定レベルで進化可能、能力+10・速度+5）
+export function canEvolve(emp: Employee): boolean {
+  const r = roles[emp.role];
+  return !!r && emp.level >= r.level;
+}
+
+export function evolve(id: string) {
+  const emp = game.employees.find((e) => e.id === id);
+  if (!emp) return;
+  const r = roles[emp.role];
+  if (!r) {
+    game.lastReport = `${emp.name} はこれ以上進化できません`;
+    return;
+  }
+  if (emp.level < r.level) {
+    game.lastReport = `${emp.name} の進化には Lv${r.level} 必要です`;
+    return;
+  }
+  const cost = 30_000_000;
+  if (game.money < cost) {
+    game.lastReport = `進化費用が足りません（${cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= cost;
+  emp.fun = Math.min(100, emp.fun + 10);
+  emp.creativity = Math.min(100, emp.creativity + 10);
+  emp.graphics = Math.min(100, emp.graphics + 10);
+  emp.music = Math.min(100, emp.music + 10);
+  emp.speed = Math.min(100, emp.speed + 5);
+  emp.role = r.to;
+  game.lastReport = `${emp.name} が ${r.to} に進化しました！`;
+}
+
+// 社員の教育（能力・レベルアップ。年俸は緩やかに上昇）
 export function train(id: string) {
   const emp = game.employees.find((e) => e.id === id);
   if (!emp) return;
@@ -215,9 +261,9 @@ export function train(id: string) {
   emp.graphics = Math.min(100, emp.graphics + 5);
   emp.music = Math.min(100, emp.music + 5);
   emp.speed = Math.min(100, emp.speed + 3);
-  emp.salary = Math.round(emp.salary * 1.15);
+  emp.salary = Math.round(emp.salary * 1.08);
   emp.level += 1;
-  game.lastReport = `${emp.name} を教育しました（Lv ${emp.level - 1} → ${emp.level}、年俸 ${(emp.salary / 10000).toLocaleString()}万円に上昇）`;
+  game.lastReport = `${emp.name} を教育しました（Lv ${emp.level - 1} → ${emp.level}、年俸 ${(emp.salary / 10000).toLocaleString()}万円）`;
 }
 
 export function hire(id: string) {
@@ -451,7 +497,7 @@ export function advanceWeek() {
     const d = game.dev;
     const speed = game.employees.reduce((s, e) => s + e.speed, 0);
     if (d.stage === '開発') {
-      const devSpeed = hasTech('fast_dev') ? 1.2 : 1.0;
+      const devSpeed = 1 + 0.1 * techLevel('fast_dev');
       d.progress += (speed / 12) * devSpeed;
       d.bug += Math.random() * 1.5;
       if (d.progress >= DEV_TARGET) {
@@ -459,7 +505,7 @@ export function advanceWeek() {
         reports.push(`「${d.name}」の開発が完了しました。バグ取りをして完成させましょう（バグ ${Math.floor(d.bug)}）`);
       }
     } else {
-      const fixSpeed = hasTech('bug_analysis') ? 2.0 : 1.0;
+      const fixSpeed = 1 + 0.5 * techLevel('bug_analysis');
       d.bug = Math.max(0, d.bug - (speed / 12) * 0.6 * fixSpeed);
     }
   }
@@ -544,6 +590,7 @@ export function loadGame(): boolean {
   if (!raw) return false;
   try {
     Object.assign(game, JSON.parse(raw));
+    if (Array.isArray(game.techs)) game.techs = {};
     return true;
   } catch {
     return false;

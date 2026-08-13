@@ -21,8 +21,11 @@
     shipCap,
     tenantCatalog,
     buyTech,
-    hasTech,
+    techLevel,
+    techDesc,
     techCatalog,
+    canEvolve,
+    evolve,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -142,6 +145,9 @@
             <td>{e.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
             <td>
               <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
+              {#if canEvolve(e)}
+                <button onclick={() => evolve(e.id)}>進化</button>
+              {/if}
               <button onclick={() => fire(e.id)}>解雇</button>
             </td>
           </tr>
@@ -292,13 +298,19 @@
         {#each techCatalog as t (t.id)}
           <tr>
             <td>{t.name}</td>
-            <td>{t.effect}</td>
-            <td>{(t.cost / 10000).toLocaleString()}万</td>
+            <td>{techDesc(t.id)}</td>
             <td>
-              {#if hasTech(t.id)}
+              {#if techLevel(t.id) >= t.maxLevel}
+                MAX
+              {:else}
+                {(t.costs[techLevel(t.id)] / 10000).toLocaleString()}万
+              {/if}
+            </td>
+            <td>
+              {#if techLevel(t.id) >= t.maxLevel}
                 取得済み
               {:else}
-                <button onclick={() => buyTech(t.id)}>研究</button>
+                <button onclick={() => buyTech(t.id)}>研究（Lv{techLevel(t.id) + 1}）</button>
               {/if}
             </td>
           </tr>
