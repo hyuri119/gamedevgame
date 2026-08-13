@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "title": "社員定義（初期ラインナップ）",
+    "note": "能力は 0〜100、salary/contract は円（年俸/契約金）。§6.3 のパロディ名と一般名を混在。"
+  },
+  "employees": [
+    { "id": "tanaka", "name": "田中 一郎", "role": "プログラマ", "level": 4, "fun": 45, "creativity": 30, "graphics": 40, "music": 15, "speed": 40, "salary": 8000000, "contract": 20000000 },
+    { "id": "sato", "name": "佐藤 花子", "role": "デザイナー", "level": 4, "fun": 40, "creativity": 50, "graphics": 55, "music": 20, "speed": 30, "salary": 9000000, "contract": 20000000 },
+    { "id": "suzuki", "name": "鈴木 次郎", "role": "シナリオライター", "level": 5, "fun": 60, "creativity": 45, "graphics": 20, "music": 20, "speed": 35, "salary": 10000000, "contract": 25000000 },
+    { "id": "yamada", "name": "山田 太郎", "role": "サウンドクリエイター", "level": 4, "fun": 35, "creativity": 40, "graphics": 15, "music": 60, "speed": 25, "salary": 8500000, "contract": 20000000 },
+    { "id": "kobayashi", "name": "小林 桜", "role": "プログラマ", "level": 3, "fun": 30, "creativity": 25, "graphics": 30, "music": 10, "speed": 35, "salary": 6000000, "contract": 15000000 },
+    { "id": "ito", "name": "伊藤 健", "role": "デザイナー", "level": 3, "fun": 35, "creativity": 35, "graphics": 45, "music": 10, "speed": 30, "salary": 6500000, "contract": 15000000 },
+    { "id": "watanabe", "name": "渡辺 実", "role": "シナリオライター", "level": 2, "fun": 25, "creativity": 30, "graphics": 10, "music": 10, "speed": 25, "salary": 5000000, "contract": 10000000 },
+    { "id": "nakamura", "name": "中村 光", "role": "サウンドクリエイター", "level": 2, "fun": 20, "creativity": 25, "graphics": 10, "music": 40, "speed": 20, "salary": 4500000, "contract": 10000000 },
+    { "id": "horita", "name": "堀田 雄三", "role": "ディレクター", "level": 6, "fun": 75, "creativity": 70, "graphics": 40, "music": 45, "speed": 45, "salary": 15000000, "contract": 40000000 },
+    { "id": "miyazawa", "name": "宮沢 はると", "role": "ディレクター", "level": 6, "fun": 70, "creativity": 80, "graphics": 55, "music": 50, "speed": 40, "salary": 16000000, "contract": 40000000 }
+  ]
+}
