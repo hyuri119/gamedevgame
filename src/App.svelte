@@ -37,6 +37,8 @@
     buyLicense,
     hasLicense,
     licenseCost,
+    restock,
+    disposeCatalog,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -137,7 +139,7 @@
   }
 
   const empName = (id: string | null) => (id ? game.employees.find((e) => e.id === id)?.name ?? '?' : '');
-  const ranking = $derived([...game.releasedGames].sort((a, b) => b.sold - a.sold));
+  const ranking = $derived([...game.catalog].sort((a, b) => b.soldTotal - a.soldTotal));
 
   const achievements = $derived([
     { label: '累計販売10万本', done: game.totalSales >= 100000 },
@@ -527,16 +529,42 @@
       <h2>売上ランキング</h2>
       <table>
         <thead>
-          <tr><th>#</th><th>タイトル</th><th>販売本数</th><th>レビュー</th><th>年</th></tr>
+          <tr><th>#</th><th>タイトル</th><th>累計販売本数</th><th>レビュー</th></tr>
         </thead>
         <tbody>
-          {#each ranking as g, i (g.name + g.year)}
+          {#each ranking as g, i (g.name)}
             <tr>
               <td>{i + 1}</td>
               <td>{g.name}</td>
-              <td>{g.sold.toLocaleString()}</td>
+              <td>{g.soldTotal.toLocaleString()}</td>
               <td>{g.reviewScore}点</td>
-              <td>{g.year}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </section>
+  {/if}
+
+  {#if game.catalog.length > 0}
+    <section>
+      <h2>カタログ（継続販売）</h2>
+      <table>
+        <thead>
+          <tr><th>タイトル</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each game.catalog as g, i (g.name)}
+            <tr>
+              <td>{g.name}</td>
+              <td>{g.inventory.toLocaleString()}本</td>
+              <td>{g.soldTotal.toLocaleString()}本</td>
+              <td>{g.reviewScore}点</td>
+              <td>
+                <button onclick={() => restock(i, Math.min(g.expectedSales * 0.2, shipCap()))}>再出荷</button>
+                {#if g.inventory > 0}
+                  <button onclick={() => disposeCatalog(i)}>処分</button>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>

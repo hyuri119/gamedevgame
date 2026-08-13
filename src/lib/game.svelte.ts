@@ -105,11 +105,27 @@ export interface ArcadeGame {
   music: number;
 }
 
+export interface CatalogGame {
+  name: string;
+  genre: string;
+  content: string;
+  hardwareId: string;
+  reviewScore: number;
+  hallOfFame: boolean;
+  expectedSales: number;
+  price: number;
+  licenseFee: number;
+  inventory: number;
+  soldTotal: number;
+}
+
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
 const DEV_TARGET = 200;
 const PEAK_YEARS = 5;
 const SALES_SHARE = [0, 0.35, 0.25, 0.15, 0.1, 0.08, 0.07];
+const LONG_TAIL_RATE = 0.005; // ロングテール週間販売率（期待売上の0.5%/週）
+const LONG_TAIL_CAP = 1.5; // 累計需要の上限（期待売上の1.5倍）
 const COMPAT: Record<string, number> = { '☆': 1.5, '◎': 1.2, '◯': 1.0, '◇': 0.85, '△': 0.7, '✕': 0.5 };
 const COMPAT_REVIEW: Record<string, number> = { '☆': 4, '◎': 2, '◯': 1, '◇': 0, '△': -2, '✕': -4 };
 const HALL_OF_FAME_SCORE = 32;
@@ -186,7 +202,7 @@ function marketFactor(hw: ReturnType<typeof findHardware>): number {
 
 const initialState = {
   money: 100_000_000,
-  week: 1,
+  week: 13, // 4月スタート（1983年4月）
   employees: [] as Employee[],
   fame: 0,
   tenants: [] as string[],
@@ -199,12 +215,12 @@ const initialState = {
   yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
   contestYear: 0,
   grandPrix: 0,
-  releasedGames: [] as { name: string; sold: number; reviewScore: number; year: number }[],
+  catalog: [] as CatalogGame[],
   hallOfFame: [] as CompletedGame[],
   totalSales: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
-  salaryYear: 0,
+  salaryYear: 1,
 };
 
 function initialStudios(): Studio[] {
@@ -730,6 +746,37 @@ export function ship(quantity: number, studioId: number) {
   game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${cost.toLocaleString()}円）`;
 }
 
+// カタログ作品の再出荷
+export function restock(idx: number, quantity: number) {
+  const g = game.catalog[idx];
+  if (!g) return;
+  const q = Math.floor(quantity);
+  if (q <= 0) return;
+  const hw = findHardware(g.hardwareId);
+  const cost = productionCost(hw) * q;
+  if (game.money < cost) {
+    game.lastReport = `生産費用が足りません（${cost.toLocaleString()}円 必要）`;
+    return;
+  }
+  game.money -= cost;
+  g.inventory += q;
+  game.lastReport = `「${g.name}」を再出荷しました（+${q.toLocaleString()}本 / 生産費 ${cost.toLocaleString()}円）`;
+}
+
+// カタログ作品の在庫処分（リサイクルショップがあれば買い取り）
+export function disposeCatalog(idx: number) {
+  const g = game.catalog[idx];
+  if (!g || g.inventory <= 0) return;
+  if (hasTenant('recycle')) {
+    const refund = g.inventory * 500;
+    game.money += refund;
+    game.lastReport = `「${g.name}」の在庫 ${g.inventory.toLocaleString()}本 を処分（リサイクル回収 +${refund.toLocaleString()}円）`;
+  } else {
+    game.lastReport = `「${g.name}」の在庫 ${g.inventory.toLocaleString()}本 を処分しました`;
+  }
+  g.inventory = 0;
+}
+
 export function finishGame(studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio || !studio.dev || studio.dev.stage !== 'バグ取り') return;
@@ -880,25 +927,54 @@ export function advanceWeek() {
         reports.push(`「${studio.onSale.name}」を ${sold.toLocaleString()}本 販売（+${revenue.toLocaleString()}円）`);
       }
       if (w >= 6 || studio.inventory === 0) {
-        if (studio.inventory > 0) {
-          if (hasTenant('recycle')) {
-            const refund = studio.inventory * 500;
-            game.money += refund;
-            reports.push(`「${studio.onSale.name}」の売れ残り ${studio.inventory.toLocaleString()}本をリサイクル回収（+${refund.toLocaleString()}円）`);
-          } else {
-            reports.push(`「${studio.onSale.name}」の売れ残り ${studio.inventory.toLocaleString()}本を処分`);
-          }
-        }
-        game.releasedGames.push({
+        // 発売キャンペーン終了 → カタログへ移行（ロングテール販売・再出荷可能に）
+        game.catalog.push({
           name: studio.onSale.name,
-          sold: studio.currentSold,
+          genre: studio.onSale.genre,
+          content: studio.onSale.content,
+          hardwareId: studio.onSale.hardwareId,
           reviewScore: studio.onSale.reviewScore,
-          year: currentYear()
+          hallOfFame: studio.onSale.hallOfFame,
+          expectedSales: studio.onSale.expectedSales,
+          price: studio.onSale.price,
+          licenseFee: studio.onSale.licenseFee,
+          inventory: studio.inventory,
+          soldTotal: studio.currentSold
         });
         studio.inventory = 0;
         studio.onSale = null;
         studio.currentSold = 0;
       }
+    }
+  }
+
+  // カタログ（ロングテール）販売
+  {
+    let tailSold = 0;
+    let tailRevenue = 0;
+    for (const g of game.catalog) {
+      const cap = Math.round(g.expectedSales * LONG_TAIL_CAP);
+      if (g.soldTotal >= cap || g.inventory <= 0) continue;
+      let demand = Math.round(g.expectedSales * LONG_TAIL_RATE);
+      // 話題スパイク（たまに再燃して売れる）
+      if (Math.random() < 0.01) {
+        const spike = Math.round(g.expectedSales * 0.05);
+        demand += spike;
+        reports.push(`「${g.name}」が再び話題になっています！（+${spike.toLocaleString()}本の需要）`);
+      }
+      demand = Math.min(demand, cap - g.soldTotal);
+      const sold = Math.min(g.inventory, demand);
+      if (sold > 0) {
+        g.inventory -= sold;
+        g.soldTotal += sold;
+        game.totalSales += sold;
+        tailSold += sold;
+        tailRevenue += sold * (g.price - g.licenseFee);
+      }
+    }
+    if (tailSold > 0) {
+      game.money += tailRevenue;
+      reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${tailRevenue.toLocaleString()}円）`);
     }
   }
 
