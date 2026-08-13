@@ -9,6 +9,10 @@
     hire,
     fire,
     train,
+    evolve,
+    canEvolve,
+    foundStudio,
+    acquireCompany,
     startDev,
     startSequel,
     ship,
@@ -24,8 +28,6 @@
     techLevel,
     techDesc,
     techCatalog,
-    canEvolve,
-    evolve,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -49,37 +51,50 @@
   const hiredIds = $derived(new Set(game.employees.map((e) => e.id)));
   const pool = $derived(employeePool.filter((e) => !hiredIds.has(e.id)));
 
+  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.onSale));
+  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.onSale));
+
   // 新規開発フォーム
   let devName = $state('私のゲーム');
   let devGenre = $state('');
   let devContent = $state('');
   let devHardware = $state('');
+  let devStudio = $state(0);
 
   $effect(() => {
     if (!genres.includes(devGenre)) devGenre = genres[0] ?? '';
     if (!contents.includes(devContent)) devContent = contents[0] ?? '';
+    if (!idleStudios.some((s) => s.id === devStudio)) devStudio = idleStudios[0]?.id ?? 0;
   });
 
   const compat = $derived(compatMark(devGenre, devContent));
 
-  // 出荷
-  let shipQty = $state(0);
+  // スタジオ発足フォーム
+  let studioName = $state('');
+  let studioLead = $state('');
+
+  // 出荷（スタジオごと）
+  let shipQtys = $state<Record<number, number>>({});
 
   const hint = $derived(
     game.gameOver
       ? 'ゲームオーバー（ブラウザをリロードで再挑戦）'
       : game.employees.length === 0
         ? 'まず社員を雇用しよう'
-        : game.dev?.stage === '開発'
-          ? '「次の週へ」を押して開発を進めよう'
-          : game.dev?.stage === 'バグ取り'
-            ? '「次の週へ」でバグを減らし、「完成する」で仕上げよう'
-            : game.completed
-              ? '出荷本数を決めて出荷しよう'
-              : game.onSale
-                ? '「次の週へ」を押して販売を進めよう'
-                : '開発を始めよう'
+        : busyStudios.length > 0
+          ? '「次の週へ」を押して開発・販売を進めよう'
+          : '開発を始めよう'
   );
+
+  function onStartDev() {
+    if (!devStudio) return;
+    const hwId = devHardware || availableHardware[0]?.id;
+    if (!hwId) return;
+    startDev(devName, devGenre, devContent, hwId, devStudio);
+  }
+
+  const hwName = (id: string) => hardware.hardware.find((h) => h.id === id)?.name ?? id;
+  const empName = (id: string | null) => (id ? game.employees.find((e) => e.id === id)?.name ?? '?' : '');
 
   const ranking = $derived([...game.releasedGames].sort((a, b) => b.sold - a.sold));
 
@@ -90,20 +105,9 @@
     { label: '殿堂入り1本', done: game.hallOfFame.length >= 1 },
     { label: 'グランプリ受賞', done: game.grandPrix >= 1 },
     { label: '知名度50', done: game.fame >= 50 },
-    { label: 'テナント3つ', done: game.tenants.length >= 3 }
+    { label: 'テナント3つ', done: game.tenants.length >= 3 },
+    { label: 'スタジオ3つ', done: game.studios.length >= 3 }
   ]);
-
-  function onStartDev() {
-    const hwId = devHardware || availableHardware[0]?.id;
-    if (!hwId) return;
-    startDev(devName, devGenre, devContent, hwId);
-  }
-
-  function onShip() {
-    ship(shipQty || game.completed?.expectedSales || 0);
-  }
-
-  const hwName = (id: string) => hardware.hardware.find((h) => h.id === id)?.name ?? id;
 </script>
 
 <main>
@@ -114,6 +118,7 @@
       <span>{year()}年 {month()}月 {weekOfMonth}週目</span>
       <span>累計販売: {game.totalSales.toLocaleString()}本</span>
       <span>知名度: {game.fame}</span>
+      <span>スタジオ: {game.studios.length}</span>
     </div>
     <p class="hint">▶ 次にやること: {hint}</p>
     {#if game.gameOver}
@@ -180,44 +185,83 @@
   </section>
 
   <section>
-    <h2>開発</h2>
-    {#if game.dev}
-      {#if game.dev.stage === '開発'}
-        <p>開発中: 「{game.dev.name}」({game.dev.genre} × {game.dev.content} / {hwName(game.dev.hardwareId)})</p>
-        <progress value={Math.min(100, (game.dev.progress / 2))} max={100}></progress>
-        <p>進捗 {Math.min(100, Math.floor(game.dev.progress / 2))}% / バグ {Math.floor(game.dev.bug)}</p>
-        <button onclick={exhibitGame} disabled={game.dev.exhibited}>
-          {game.dev.exhibited ? '出展済み' : 'ゲームデックスに出展（知名度UP）'}
-        </button>
-      {:else}
-        <p>バグ取り中: 「{game.dev.name}」 バグ {Math.floor(game.dev.bug)}</p>
-        <p>「次の週へ」でバグが減ります。減らし終えたら完成させましょう。</p>
-        <button onclick={finishGame}>完成する</button>
-        <button onclick={exhibitGame} disabled={game.dev.exhibited}>
-          {game.dev.exhibited ? '出展済み' : 'ゲームデックスに出展（知名度UP）'}
-        </button>
-      {/if}
-    {:else if game.completed}
-      <p>完成: 「{game.completed.name}」 レビュー {game.completed.reviewScore}点
-        {#if game.completed.hallOfFame}<strong>（殿堂入り！）</strong>{/if}
-      </p>
-      <ul>
-        <li>おもしろさ {game.completed.fun} / 独創性 {game.completed.creativity}</li>
-        <li>グラフィック {game.completed.graphics} / 音楽 {game.completed.music} / バグ {game.completed.bug}</li>
-        <li>期待売上 約 {game.completed.expectedSales.toLocaleString()}本</li>
-      </ul>
-      <div class="ship">
-        <label>
-          出荷本数（上限 {shipCap().toLocaleString()}本）:
-          <input type="number" bind:value={shipQty} min="0" placeholder={String(Math.min(game.completed.expectedSales, shipCap()))} />
-        </label>
-        <button onclick={onShip}>出荷する</button>
-        <button onclick={() => (shipQty = Math.min(game.completed!.expectedSales, shipCap()))}>期待売上分</button>
+    <h2>スタジオ（{game.studios.length}/5）</h2>
+
+    {#each game.studios as s (s.id)}
+      <div class="studio">
+        <h3>{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</h3>
+        {#if s.dev}
+          {#if s.dev.stage === '開発'}
+            <p>開発中: 「{s.dev.name}」({s.dev.genre} × {s.dev.content} / {hwName(s.dev.hardwareId)})</p>
+            <progress value={Math.min(100, s.dev.progress / 2)} max={100}></progress>
+            <p>進捗 {Math.min(100, Math.floor(s.dev.progress / 2))}% / バグ {Math.floor(s.dev.bug)}</p>
+            <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
+              {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+            </button>
+          {:else}
+            <p>バグ取り中: 「{s.dev.name}」 バグ {Math.floor(s.dev.bug)}</p>
+            <button onclick={() => finishGame(s.id)}>完成する</button>
+            <button onclick={() => exhibitGame(s.id)} disabled={s.dev.exhibited}>
+              {s.dev.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+            </button>
+          {/if}
+        {:else if s.completed}
+          <p>完成: 「{s.completed.name}」 レビュー {s.completed.reviewScore}点
+            {#if s.completed.hallOfFame}<strong>（殿堂入り！）</strong>{/if}
+          </p>
+          <ul>
+            <li>おもしろさ {s.completed.fun} / 独創性 {s.completed.creativity}</li>
+            <li>グラフィック {s.completed.graphics} / 音楽 {s.completed.music} / バグ {s.completed.bug}</li>
+            <li>期待売上 約 {s.completed.expectedSales.toLocaleString()}本</li>
+          </ul>
+          <div class="ship">
+            <label>
+              出荷本数（上限 {shipCap().toLocaleString()}本）:
+              <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed.expectedSales, shipCap()))} />
+            </label>
+            <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id)}>出荷する</button>
+            <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
+          </div>
+          <button onclick={() => exhibitGame(s.id)} disabled={s.completed.exhibited}>
+            {s.completed.exhibited ? '出展済み' : 'ゲームデックスに出展'}
+          </button>
+        {:else if s.onSale}
+          <p>販売中: 「{s.onSale.name}」在庫 {s.inventory.toLocaleString()}本（{s.onSale.weeksOnSale}週目）</p>
+        {:else}
+          <p>空き（開発待ち）</p>
+        {/if}
       </div>
-    {:else if game.onSale}
-      <p>販売中: 「{game.onSale.name}」在庫 {game.inventory.toLocaleString()}本（{game.onSale.weeksOnSale}週目）</p>
+    {/each}
+
+    <div class="studio-form">
+      <h3>新スタジオ発足（3億円・責任者Lv5以上）</h3>
+      <label>スタジオ名 <input type="text" bind:value={studioName} placeholder="スタジオ名" /></label>
+      <label>
+        責任者
+        <select bind:value={studioLead}>
+          <option value="">選択してください</option>
+          {#each game.employees.filter((e) => e.level >= 5) as e (e.id)}
+            <option value={e.id}>{e.name}（Lv{e.level}）</option>
+          {/each}
+        </select>
+      </label>
+      <button onclick={() => foundStudio(studioName || '新スタジオ', studioLead)}>発足する</button>
+      <button onclick={acquireCompany}>他社を買収（8億円）</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>新規開発</h2>
+    {#if idleStudios.length === 0}
+      <p>空いているスタジオがありません。</p>
     {:else}
       <div class="devform">
+        <label>
+          スタジオ
+          <select bind:value={devStudio}>
+            {#each idleStudios as s}<option value={s.id}>{s.name}</option>{/each}
+          </select>
+        </label>
         <label>タイトル <input type="text" bind:value={devName} /></label>
         <label>
           ジャンル（{genres.length}/{kumiawase.genres.length} 解放）
@@ -255,7 +299,11 @@
           {#each game.hallOfFame as h (h.name + h.reviewScore)}
             <tr>
               <td>{h.name}</td><td>{h.reviewScore}点</td><td>{hwName(h.hardwareId)}</td>
-              <td><button onclick={() => startSequel(h)}>続編を開発</button></td>
+              <td>
+                {#if idleStudios.length > 0}
+                  <button onclick={() => startSequel(h, idleStudios[0].id)}>続編を開発</button>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -411,6 +459,16 @@
     padding: 12px;
     margin-bottom: 16px;
   }
+  .studio {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+  }
+  .studio h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+  }
   table {
     border-collapse: collapse;
     width: 100%;
@@ -429,13 +487,15 @@
   button {
     cursor: pointer;
   }
-  .devform {
+  .devform,
+  .studio-form {
     display: flex;
     flex-direction: column;
     gap: 8px;
     max-width: 480px;
   }
-  .devform label {
+  .devform label,
+  .studio-form label {
     display: flex;
     justify-content: space-between;
     gap: 8px;
@@ -445,6 +505,7 @@
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+    margin: 6px 0;
   }
   .hw {
     font-size: 0.85rem;
