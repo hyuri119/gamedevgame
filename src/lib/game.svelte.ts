@@ -81,6 +81,30 @@ export interface HwProject {
   cost: number;
 }
 
+export interface ArcadeProject {
+  name: string;
+  genre: string;
+  content: string;
+  boardId: string;
+  stage: '開発' | 'バグ取り';
+  progress: number;
+  bug: number;
+}
+
+export interface ArcadeGame {
+  name: string;
+  genre: string;
+  content: string;
+  boardId: string;
+  opeRate: number; // 稼働率 0〜100
+  weeksLeft: number;
+  ported: boolean;
+  fun: number;
+  creativity: number;
+  graphics: number;
+  music: number;
+}
+
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
 const DEV_TARGET = 200;
@@ -96,6 +120,9 @@ const SHIP_CAP_BASE = 500_000;
 const SHIP_CAP_FACTORY = 2_000_000;
 const STUDIO_COST = 300_000_000;
 const ACQUIRE_COST = 800_000_000;
+const ARCADE_DEV_TARGET = 120;
+const ARCADE_WEEKS = 24;
+const ARCADE_INCOME = 30_000;
 
 export const employeePool: Employee[] = employeesData.employees;
 
@@ -161,6 +188,8 @@ const initialState = {
   techs: {} as Record<string, number>,
   ownHardware: [] as OwnHardware[],
   hwProject: null as HwProject | null,
+  arcadeProject: null as ArcadeProject | null,
+  arcadeGames: [] as ArcadeGame[],
   yearGames: [] as { name: string; reviewScore: number; graphics: number; music: number }[],
   contestYear: 0,
   grandPrix: 0,
@@ -429,6 +458,126 @@ function completeHardware(): string {
   game.hwProject = null;
   game.fame = Math.min(100, game.fame + 5);
   return `自社ハード「${p.name}」が完成！ 普及見込み ${Math.round(installBase / 10000).toLocaleString()}万台（ライセンス料0円で開発可能）`;
+}
+
+// アーケードゲーム開発
+export function startArcade(name: string, genre: string, content: string, boardId: string) {
+  if (game.arcadeProject) {
+    game.lastReport = 'すでにアーケードゲームを開発中です';
+    return;
+  }
+  if (game.employees.length === 0) {
+    game.lastReport = '社員がいません。先に雇用してください';
+    return;
+  }
+  game.arcadeProject = { name, genre, content, boardId, stage: '開発', progress: 0, bug: 0 };
+  game.lastReport = `アーケード「${name}」の開発を開始しました（${genre} × ${content} / ${hwName(boardId)}）`;
+}
+
+export function finishArcade() {
+  if (!game.arcadeProject || game.arcadeProject.stage !== 'バグ取り') return;
+  const msg = completeArcade();
+  game.lastReport = msg;
+}
+
+function completeArcade(): string {
+  const p = game.arcadeProject!;
+  const hw = findHardware(p.boardId);
+  const power = hw?.params?.power ?? 5;
+  const cap = power * 10;
+  const n = game.employees.length || 1;
+  const avg = (key: 'fun' | 'creativity' | 'graphics' | 'music') =>
+    game.employees.reduce((s, e) => s + e[key], 0) / n;
+  const clamp100 = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+
+  const fun = clamp100(avg('fun') * 1.2);
+  const creativity = clamp100(avg('creativity') * 1.2);
+  const graphics = Math.min(cap, clamp100(avg('graphics') * 1.2));
+  const music = Math.min(cap, clamp100(avg('music') * 1.2));
+  const bug = Math.max(0, Math.min(30, Math.round(p.bug)));
+
+  const score = Math.max(0, 0.4 * fun + 0.3 * creativity + 0.15 * graphics + 0.15 * music - bug * 0.8);
+  const opeRate = Math.max(0, Math.min(100, Math.round(score * compatCoeff(p.genre, p.content))));
+
+  game.arcadeGames.push({
+    name: p.name,
+    genre: p.genre,
+    content: p.content,
+    boardId: p.boardId,
+    opeRate,
+    weeksLeft: ARCADE_WEEKS,
+    ported: false,
+    fun,
+    creativity,
+    graphics,
+    music
+  });
+  game.arcadeProject = null;
+  return `アーケード「${p.name}」が完成！ 稼働率 ${opeRate}（週間インカム ${(opeRate * ARCADE_INCOME).toLocaleString()}円）`;
+}
+
+// アーケード作品を家庭用に移植（稼働率60以上、知名度上乗せ）
+export function portArcade(idx: number) {
+  const ag = game.arcadeGames[idx];
+  if (!ag || ag.ported) return;
+  if (ag.opeRate < 60) {
+    game.lastReport = '移植には稼働率60以上が必要です';
+    return;
+  }
+  const studio = game.studios.find((s) => !s.dev && !s.completed && !s.onSale);
+  if (!studio) {
+    game.lastReport = '空いているスタジオがありません';
+    return;
+  }
+  const y = currentYear();
+  const homeHw = hardware.hardware
+    .filter((h) => h.type !== 'arcade' && h.installBase != null && h.releaseYear <= y && (h.endYear == null || h.endYear >= y))
+    .sort((a, b) => (b.installBase ?? 0) - (a.installBase ?? 0))[0];
+  if (!homeHw) {
+    game.lastReport = '移植先の家庭用ハードがありません';
+    return;
+  }
+  const hw = findHardware(homeHw.id)!;
+  const power = hw.params?.power ?? 5;
+  const cap = power * 10;
+
+  const fun = Math.min(100, ag.fun + 10);
+  const creativity = Math.min(100, ag.creativity + 10);
+  const graphics = Math.min(cap, ag.graphics + 10);
+  const music = Math.min(cap, ag.music + 10);
+
+  const score = Math.max(0, 0.4 * fun + 0.3 * creativity + 0.15 * graphics + 0.15 * music);
+  const mark = compatMark(ag.genre, ag.content);
+  const reviewScore = Math.max(0, Math.min(40, Math.round((score / 100) * 40 + (COMPAT_REVIEW[mark] ?? 0))));
+  const hallOfFame = reviewScore >= HALL_OF_FAME_SCORE;
+
+  const quality = 0.5 + score / 100;
+  const compat = compatCoeff(ag.genre, ag.content);
+  const reach = 0.08 * quality * compat * fameCoeff(game.fame);
+  const expectedSales = Math.round(effectiveInstallBase(homeHw.id, y) * reach);
+
+  studio.completed = {
+    name: ag.name + '（移植版）',
+    genre: ag.genre,
+    content: ag.content,
+    hardwareId: homeHw.id,
+    fun,
+    creativity,
+    graphics,
+    music,
+    bug: 0,
+    reviewScore,
+    hallOfFame,
+    expectedSales,
+    price: 5800,
+    licenseFee: Math.round((hw.licenseFee ?? 0) * licenseFeeMultiplier()),
+    weeksOnSale: 0,
+    exhibited: false
+  };
+  ag.ported = true;
+  game.fame = Math.min(100, game.fame + 5);
+  if (hallOfFame) game.hallOfFame.push({ ...studio.completed });
+  game.lastReport = `アーケード「${ag.name}」を家庭用に移植しました（知名度 +5）`;
 }
 
 export function startDev(name: string, genre: string, content: string, hardwareId: string, studioId: number) {
@@ -714,6 +863,32 @@ export function advanceWeek() {
     if (net !== 0) {
       game.money += net;
       reports.push(`自社ハード「${oh.name}」${net >= 0 ? '収益' : '維持費'} ${net >= 0 ? '+' : ''}${net.toLocaleString()}円`);
+    }
+  }
+
+  // アーケード開発の進行
+  if (game.arcadeProject) {
+    const p = game.arcadeProject;
+    const speed = game.employees.reduce((s, e) => s + e.speed, 0);
+    if (p.stage === '開発') {
+      p.progress += speed / 12;
+      p.bug += Math.random() * 1.5;
+      if (p.progress >= ARCADE_DEV_TARGET) {
+        p.stage = 'バグ取り';
+        reports.push(`アーケード「${p.name}」の開発が完了しました。バグ取りをして完成させましょう（バグ ${Math.floor(p.bug)}）`);
+      }
+    } else {
+      p.bug = Math.max(0, p.bug - (speed / 12) * 0.6 * (1 + 0.5 * techLevel('bug_analysis')));
+    }
+  }
+
+  // アーケード稼働収益（インカム）
+  for (const ag of game.arcadeGames) {
+    if (ag.weeksLeft > 0) {
+      const income = ag.opeRate * ARCADE_INCOME;
+      game.money += income;
+      ag.weeksLeft -= 1;
+      reports.push(`アーケード「${ag.name}」インカム +${income.toLocaleString()}円`);
     }
   }
 

@@ -31,6 +31,9 @@
     startHardware,
     canDevelopHardware,
     hwName,
+    startArcade,
+    finishArcade,
+    portArcade,
     effectiveInstallBase,
     compatMark
   } from './lib/game.svelte';
@@ -80,6 +83,29 @@
   let hwDevName = $state('');
   let hwType = $state('家庭用');
   let hwPower = $state(5);
+
+  // アーケード開発フォーム
+  const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
+  let arcName = $state('');
+  let arcGenre = $state('');
+  let arcContent = $state('');
+  let arcBoard = $state('');
+
+  $effect(() => {
+    if (!genres.includes(arcGenre)) arcGenre = genres[0] ?? '';
+    if (!contents.includes(arcContent)) arcContent = contents[0] ?? '';
+    if (!arcadeBoards.some((b) => b.id === arcBoard)) arcBoard = arcadeBoards[0]?.id ?? '';
+  });
+
+  // 自動進行（放置）
+  let auto = $state(false);
+  let autoSpeed = $state(1);
+
+  $effect(() => {
+    if (!auto || game.gameOver) return;
+    const t = setInterval(() => advanceWeek(), 1000 / autoSpeed);
+    return () => clearInterval(t);
+  });
 
   // 出荷（スタジオごと）
   let shipQtys = $state<Record<number, number>>({});
@@ -131,6 +157,14 @@
       <p class="gameover">破産しました（ゲームオーバー）</p>
     {/if}
     <button onclick={advanceWeek} disabled={game.gameOver}>次の週へ ▶</button>
+    <button onclick={() => (auto = !auto)} disabled={game.gameOver}>{auto ? '⏸ 停止' : '▶ 自動進行'}</button>
+    {#if auto}
+      <select bind:value={autoSpeed}>
+        <option value={1}>1x</option>
+        <option value={2}>2x</option>
+        <option value={5}>5x</option>
+      </select>
+    {/if}
     <button onclick={saveGame}>セーブ</button>
     <button onclick={resetGame}>リセット</button>
     <p class="report">{game.lastReport}</p>
@@ -331,6 +365,67 @@
           <li>【自社】{h.name}（{h.type} / 性能 {h.params.power} / 普及見込み {Math.round(h.installBase / 10000)}万台）</li>
         {/each}
       </ul>
+    {/if}
+  </section>
+
+  <section>
+    <h2>アーケード</h2>
+    {#if game.arcadeProject}
+      {#if game.arcadeProject.stage === '開発'}
+        <p>開発中: 「{game.arcadeProject.name}」（{game.arcadeProject.genre} × {game.arcadeProject.content} / {hwName(game.arcadeProject.boardId)}）</p>
+        <progress value={Math.min(100, game.arcadeProject.progress / 1.2)} max={100}></progress>
+        <p>進捗 {Math.min(100, Math.floor(game.arcadeProject.progress / 1.2))}% / バグ {Math.floor(game.arcadeProject.bug)}</p>
+      {:else}
+        <p>バグ取り中: 「{game.arcadeProject.name}」 バグ {Math.floor(game.arcadeProject.bug)}</p>
+        <button onclick={finishArcade}>完成する</button>
+      {/if}
+    {:else}
+      <div class="devform">
+        <label>タイトル <input type="text" bind:value={arcName} /></label>
+        <label>
+          ジャンル
+          <select bind:value={arcGenre}>
+            {#each genres as g}<option value={g}>{g}</option>{/each}
+          </select>
+        </label>
+        <label>
+          内容
+          <select bind:value={arcContent}>
+            {#each contents as c}<option value={c}>{c}</option>{/each}
+          </select>
+        </label>
+        <label>
+          基板
+          <select bind:value={arcBoard}>
+            {#each arcadeBoards as b}<option value={b.id}>{b.name}</option>{/each}
+          </select>
+        </label>
+        <button onclick={() => startArcade(arcName || 'アーケード作品', arcGenre, arcContent, arcBoard)}>開発を始める</button>
+      </div>
+    {/if}
+
+    {#if game.arcadeGames.length > 0}
+      <table>
+        <thead>
+          <tr><th>タイトル</th><th>稼働率</th><th>残り週</th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each game.arcadeGames as ag, i (ag.name + i)}
+            <tr>
+              <td>{ag.name}</td>
+              <td>{ag.opeRate}</td>
+              <td>{ag.weeksLeft > 0 ? `${ag.weeksLeft}週` : '稼働終了'}</td>
+              <td>
+                {#if !ag.ported && ag.opeRate >= 60}
+                  <button onclick={() => portArcade(i)}>家庭用に移植</button>
+                {:else if ag.ported}
+                  移植済み
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </section>
 
