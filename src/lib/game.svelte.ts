@@ -164,7 +164,7 @@ export const storeCatalog: Store[] = storesData.stores;
 
 export const START_YEAR = 1983;
 export const WEEKS_PER_YEAR = 48;
-const DEV_TARGET = 200;
+const DEV_TARGET = 120;
 const PEAK_YEARS = 5;
 const SALES_SHARE = [0, 0.35, 0.25, 0.15, 0.1, 0.08, 0.07];
 const LONG_TAIL_RATE = 0.005; // ロングテール週間販売率（期待売上の0.5%/週）
@@ -262,6 +262,14 @@ function fameCoeff(fame: number): number {
 // 市場係数（ハード種別による売れやすさの差）
 function marketFactor(hw: ReturnType<typeof findHardware>): number {
   return hw?.type === 'pc' ? PC_SALES_COEFF : 1.0;
+}
+
+// 市場成長係数: 序盤は市場が小さい（10%）ため売上が少なく、年を追うごとに成長して最大1.0倍へ
+const MARKET_GROWTH_START = 0.1;
+const MARKET_GROWTH_PER_YEAR = 0.05;
+function marketGrowth(year: number): number {
+  const t = Math.max(0, year - START_YEAR);
+  return Math.min(1, MARKET_GROWTH_START + t * MARKET_GROWTH_PER_YEAR);
 }
 
 const initialState = {
@@ -716,7 +724,7 @@ export function portArcade(idx: number) {
 
   const quality = 0.5 + score / 100;
   const compat = compatCoeff(ag.genre, ag.content);
-  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * marketFactor(hw);
+  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * marketFactor(hw) * marketGrowth(y);
   const expectedSales = Math.round(effectiveInstallBase(homeHw.id, y) * reach);
 
   studio.completed = {
@@ -982,7 +990,7 @@ function completeDev(studio: Studio) {
   const compat = compatCoeff(d.genre, d.content);
   const m = month();
   const season = m === 7 || m === 12 ? 1.3 : 1.0;
-  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * season * marketFactor(hw);
+  const reach = 0.08 * quality * compat * fameCoeff(game.fame) * season * marketFactor(hw) * marketGrowth(currentYear());
   const expectedSales = Math.round(effectiveInstallBase(d.hardwareId, currentYear()) * reach);
 
   studio.completed = {
@@ -1162,7 +1170,7 @@ export function advanceWeek() {
     const studio = game.studios.find((s) => s.id === c.studioId);
     const speed = game.employees.reduce((s, e) => s + e.speed, 0);
     const leadBonus = studio?.leadId ? 1.1 : 1.0;
-    c.progress += (speed / 12) * leadBonus;
+    c.progress += (speed / 10) * leadBonus;
     c.elapsed += 1;
     if (c.progress >= c.target) {
       const onTime = c.elapsed <= c.deadline;

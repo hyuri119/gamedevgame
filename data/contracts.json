@@ -4,9 +4,9 @@
     "note": "§6.2 スマホ版++の受注開発。minFame 以上の知名度で依頼が来る＝オファー。序盤の資金源。納期を過ぎると報酬減額。"
   },
   "contracts": [
-    { "id": "c1", "name": "業務ソフトの下請け", "desc": "業務用ソフトの開発下請け。地味だが確実な収入。", "reward": 20000000, "deadline": 12, "minFame": 0, "target": 80 },
-    { "id": "c2", "name": "教育ソフトの受託開発", "desc": "学校向け教育ソフトの受託。", "reward": 30000000, "deadline": 12, "minFame": 0, "target": 90 },
-    { "id": "c3", "name": "パズルゲームの移植", "desc": "他社パズルゲームのハード移植作業。", "reward": 35000000, "deadline": 14, "minFame": 0, "target": 100 },
+    { "id": "c1", "name": "業務ソフトの下請け", "desc": "業務用ソフトの開発下請け。地味だが確実な収入。", "reward": 20000000, "deadline": 12, "minFame": 0, "target": 40 },
+    { "id": "c2", "name": "教育ソフトの受託開発", "desc": "学校向け教育ソフトの受託。", "reward": 30000000, "deadline": 12, "minFame": 0, "target": 50 },
+    { "id": "c3", "name": "パズルゲームの移植", "desc": "他社パズルゲームのハード移植作業。", "reward": 35000000, "deadline": 14, "minFame": 0, "target": 60 },
     { "id": "c4", "name": "大手のミニゲーム受注", "desc": "大手メーカーのミニゲーム開発を受注。", "reward": 80000000, "deadline": 16, "minFame": 10, "target": 120 },
     { "id": "c5", "name": "アニメのゲーム化（外注）", "desc": "人気アニメのゲーム化を外注で受注。", "reward": 150000000, "deadline": 20, "minFame": 20, "target": 140 },
     { "id": "c6", "name": "有名漫画家の原作ゲーム化", "desc": "有名漫画家の原作をゲーム化する案件。", "reward": 200000000, "deadline": 22, "minFame": 30, "target": 150 },
