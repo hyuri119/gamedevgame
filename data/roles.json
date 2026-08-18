@@ -1,15 +1,48 @@
 {
   "meta": {
     "title": "職業進化",
-    "note": "§3.1。指定レベルに達すると進化可能（能力+10、速度+5）。スーパーハッカーが最強職。"
+    "note": "§3.1。指定レベルに達すると進化可能。進化先は複数から選択でき、経験済みの職業にはいつでも転職できる。職業ごとにレベルを持ち、レベルに応じて基礎能力にプラス補正（bonus×jobLevel）が付く。"
   },
   "roles": {
-    "プログラマ": { "to": "ディレクター", "level": 5 },
-    "シナリオライター": { "to": "ディレクター", "level": 5 },
-    "デザイナー": { "to": "プロデューサー", "level": 5 },
-    "サウンドクリエイター": { "to": "プロデューサー", "level": 5 },
-    "ディレクター": { "to": "ハードエンジニア", "level": 8 },
-    "プロデューサー": { "to": "ハードエンジニア", "level": 8 },
-    "ハードエンジニア": { "to": "スーパーハッカー", "level": 10 }
+    "プログラマ": {
+      "to": ["ディレクター", "ハードエンジニア"],
+      "level": 5,
+      "bonus": { "fun": 2, "creativity": 2, "graphics": 2, "music": 2, "speed": 2 }
+    },
+    "シナリオライター": {
+      "to": ["ディレクター", "プロデューサー"],
+      "level": 5,
+      "bonus": { "fun": 2, "creativity": 2, "graphics": 2, "music": 2, "speed": 2 }
+    },
+    "デザイナー": {
+      "to": ["プロデューサー", "ディレクター"],
+      "level": 5,
+      "bonus": { "fun": 2, "creativity": 2, "graphics": 2, "music": 2, "speed": 2 }
+    },
+    "サウンドクリエイター": {
+      "to": ["プロデューサー", "ディレクター"],
+      "level": 5,
+      "bonus": { "fun": 2, "creativity": 2, "graphics": 2, "music": 2, "speed": 2 }
+    },
+    "ディレクター": {
+      "to": ["プロデューサー", "ハードエンジニア"],
+      "level": 8,
+      "bonus": { "fun": 3, "creativity": 3, "graphics": 2, "music": 2, "speed": 2 }
+    },
+    "プロデューサー": {
+      "to": ["ディレクター", "ハードエンジニア"],
+      "level": 8,
+      "bonus": { "fun": 2, "creativity": 3, "graphics": 2, "music": 3, "speed": 2 }
+    },
+    "ハードエンジニア": {
+      "to": ["スーパーハッカー"],
+      "level": 10,
+      "bonus": { "fun": 2, "creativity": 2, "graphics": 2, "music": 2, "speed": 4 }
+    },
+    "スーパーハッカー": {
+      "to": [],
+      "level": 10,
+      "bonus": { "fun": 4, "creativity": 4, "graphics": 3, "music": 3, "speed": 4 }
+    }
   }
 }

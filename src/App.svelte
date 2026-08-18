@@ -11,6 +11,11 @@
     train,
     evolve,
     canEvolve,
+    evolveOptions,
+    jobLevel,
+    effStats,
+    canSwitchJob,
+    switchJob,
     foundStudio,
     acquireCompany,
     startDev,
@@ -139,6 +144,10 @@
     const t = setInterval(() => advanceWeek(), 5000 / autoSpeed);
     return () => clearInterval(t);
   });
+
+  // 進化先・転職先の選択
+  let evoChoices = $state<Record<string, string>>({});
+  let switchChoices = $state<Record<string, string>>({});
 
   const hint = $derived(
     game.gameOver
@@ -430,19 +439,33 @@
         <thead>
           <tr>
             <th>名前</th><th>役職</th><th>Lv</th>
-            <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th></th>
+            <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th>操作</th>
           </tr>
         </thead>
         <tbody>
           {#each game.employees as e (e.id)}
+            {@const es = effStats(e)}
             <tr>
-              <td>{e.name}</td><td>{e.role}</td><td>{e.level}</td>
-              <td>{e.fun}</td><td>{e.creativity}</td><td>{e.graphics}</td><td>{e.music}</td>
-              <td>{e.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
+              <td>{e.name}</td>
+              <td>{e.role}（職業Lv{jobLevel(e)}）</td>
+              <td>{e.level}</td>
+              <td>{es.fun}</td><td>{es.creativity}</td><td>{es.graphics}</td><td>{es.music}</td>
+              <td>{es.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
               <td>
                 <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
                 {#if canEvolve(e)}
-                  <button onclick={() => evolve(e.id)}>進化</button>
+                  <select bind:value={evoChoices[e.id]}>
+                    {#each evolveOptions(e) as t}<option value={t}>{t}</option>{/each}
+                  </select>
+                  <button onclick={() => evolve(e.id, evoChoices[e.id])}>進化</button>
+                {/if}
+                {#if canSwitchJob(e)}
+                  <select bind:value={switchChoices[e.id]}>
+                    {#each Object.keys(e.jobLevels ?? { [e.role]: 1 }) as t}
+                      {#if t !== e.role}<option value={t}>{t}（Lv{jobLevel(e, t)}）</option>{/if}
+                    {/each}
+                  </select>
+                  <button onclick={() => switchJob(e.id, switchChoices[e.id])}>転職</button>
                 {/if}
                 <button onclick={() => fire(e.id)}>解雇</button>
               </td>
@@ -450,6 +473,7 @@
           {/each}
         </tbody>
       </table>
+      <p class="pnote">能力値は職業ボーナス込みの実効値です。教育・進化で基礎能力と職業レベルが上がります。</p>
     </Modal>
   {/if}
 
