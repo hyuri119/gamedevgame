@@ -283,16 +283,34 @@
     // 社員の配置
     const empIds = game.employees.map((e) => e.id);
     removeMissing(empIds);
-    const workIds = empIds.slice(0, work.length);
 
-    let i = 0;
+    // 開発中の机へ社員を割り当て（1机あたり最大3人、机数ぶんまで）
+    const MAX_PER_DESK = 3;
+    const assign = new Map<string, { deskIdx: number; seat: number }>();
+    const deskCount = Math.max(work.length, 1);
+    for (let i = 0; i < game.employees.length; i++) {
+      const seat = Math.floor(i / deskCount);
+      const deskIdx = i % deskCount;
+      if (work.length > 0 && seat < MAX_PER_DESK) assign.set(empIds[i], { deskIdx, seat });
+    }
+
+    const deskSeatPos = (deskIdx: number, seat: number) => {
+      const cx = DESK_X(deskIdx) + DESK_W / 2 - 6;
+      if (seat === 0) return { x: cx, y: DESK_Y - 12 };
+      if (seat === 1) return { x: cx - 26, y: DESK_Y + 12 };
+      return { x: cx + 26, y: DESK_Y + 12 };
+    };
+
+    let ci = 0;
     for (const e of game.employees) {
-      const a = ensureAgent(e.id, COLORS[i % COLORS.length]);
-      const deskIdx = workIds.indexOf(e.id);
-      if (deskIdx >= 0) {
+      const a = ensureAgent(e.id, COLORS[ci % COLORS.length]);
+      ci++;
+      const as = assign.get(e.id);
+      if (as) {
         // 開発中: 机に着いて作業
-        a.tx = DESK_X(deskIdx) + DESK_W / 2 - 6;
-        a.ty = DESK_Y - 10;
+        const tgt = deskSeatPos(as.deskIdx, as.seat);
+        a.tx = tgt.x;
+        a.ty = tgt.y;
         a.vx = 0;
         a.vy = 0;
         const spd = 4;
@@ -321,7 +339,6 @@
         }
         a.bob += 1;
       }
-      i++;
     }
 
     // フローティングテキスト
@@ -382,12 +399,10 @@
       ctx.restore();
     }
 
-    // 社員本体の描画
-    let ei = 0;
     for (const e of game.employees) {
       const a = agents.get(e.id)!;
-      const deskIdx = workIds.indexOf(e.id);
-      const isWork = deskIdx >= 0;
+      const as = assign.get(e.id);
+      const isWork = !!as;
       const bobY = isWork ? Math.sin(a.bob / 5) * 2 : Math.sin(a.bob / 8) * 1;
       // 体
       ctx.fillStyle = a.color;
@@ -410,21 +425,20 @@
       ctx.textAlign = 'center';
       ctx.fillText(e.name.slice(0, 1), a.x, a.y + bobY + 20);
 
-      if (isWork) {
-        // 開発中の進捗バーと作業アニメーション
-        const wd = work[deskIdx];
+      if (isWork && as!.seat === 0) {
+        // リーダーの頭上に進捗バーと作業アニメーション
+        const wd = work[as!.deskIdx];
         const pct = Math.min(100, (wd.progress / wd.target) * 100);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillRect(a.x - 22, a.y - 34, 44, 6);
         ctx.fillStyle = '#3d84a8';
         ctx.fillRect(a.x - 22, a.y - 34, 44 * (pct / 100), 6);
         // キータイプ風の「チャカチャカ」アニメ
-        const kk = Math.floor(performance.now() / 180 + deskIdx) % 3;
+        const kk = Math.floor(performance.now() / 180 + as!.deskIdx) % 3;
         ctx.fillStyle = '#555';
         ctx.font = 'bold 9px sans-serif';
         ctx.fillText('.'.repeat(kk + 1), a.x, a.y + bobY - 44);
       }
-      ei++;
     }
 
     // 開発中は机の横に「開発中」のラベル
@@ -456,7 +470,6 @@
 <style>
   .office {
     width: 100%;
-    max-width: 800px;
     border-radius: 6px;
     display: block;
   }

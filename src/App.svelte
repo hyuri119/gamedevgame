@@ -135,7 +135,7 @@
   let autoSpeed = $state(1);
 
   $effect(() => {
-    if (!auto || game.gameOver) return;
+    if (!auto || game.gameOver || game.event) return;
     const t = setInterval(() => advanceWeek(), 5000 / autoSpeed);
     return () => clearInterval(t);
   });
@@ -221,6 +221,17 @@
     {/if}
   </header>
 
+  <section class="top">
+    <div class="chart-box">
+      <h2>売上グラフ</h2>
+      <SalesChart />
+    </div>
+    <div class="office-box">
+      <h2>オフィス</h2>
+      <OfficeCanvas />
+    </div>
+  </section>
+
   <section class="progress">
     <h2>進捗</h2>
     {#each game.studios.filter((s) => s.dev) as s (s.id)}
@@ -279,16 +290,6 @@
     {#if game.studios.filter((s) => s.dev).length === 0 && game.studios.filter((s) => s.completed).length === 0 && game.sales.length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
       <p class="pnote">進行中の開発・出荷待ちの作品はありません</p>
     {/if}
-  </section>
-
-  <section>
-    <h2>売上グラフ</h2>
-    <SalesChart />
-  </section>
-
-  <section>
-    <h2>オフィス</h2>
-    <OfficeCanvas />
   </section>
 
   <nav class="ribbon">
@@ -883,6 +884,23 @@
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 12px;
+  }
+  .top {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .chart-box {
+    flex: 1;
+    min-width: 320px;
+  }
+  .office-box {
+    flex: 0 0 340px;
+  }
+  .office-box h2,
+  .chart-box h2 {
+    margin-top: 0;
   }
   .progress .prow {
     display: flex;
