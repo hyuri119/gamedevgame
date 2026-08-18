@@ -69,6 +69,12 @@ export interface OnSaleGame {
   currentSold: number;
 }
 
+export interface SalesPoint {
+  week: number;
+  revenue: number;
+  sold: number;
+}
+
 export interface OwnHardware {
   id: string;
   name: string;
@@ -320,6 +326,7 @@ const initialState = {
   grandPrix: 0,
   catalog: [] as CatalogGame[],
   sales: [] as OnSaleGame[],
+  salesHistory: [] as SalesPoint[],
   hallOfFame: [] as CompletedGame[],
   activeContract: null as ActiveContract | null,
   doneContracts: [] as string[],
@@ -1124,6 +1131,8 @@ export function advanceWeek() {
   }
 
   // 発売キャンペーン販売（スタジオから切り離し、販売中も次の開発が可能）
+  let weekRevenue = 0;
+  let weekSold = 0;
   for (let i = game.sales.length - 1; i >= 0; i--) {
     const sale = game.sales[i];
     sale.game.weeksOnSale += 1;
@@ -1137,6 +1146,8 @@ export function advanceWeek() {
       sale.inventory -= sold;
       game.totalSales += sold;
       sale.currentSold += sold;
+      weekRevenue += revenue;
+      weekSold += sold;
       reports.push(`「${sale.game.name}」を ${sold.toLocaleString()}本 販売（+${man(revenue)}）`);
     }
     if (w >= 6 || sale.inventory === 0) {
@@ -1186,9 +1197,15 @@ export function advanceWeek() {
     }
     if (tailSold > 0) {
       game.money += tailRevenue;
+      weekRevenue += tailRevenue;
+      weekSold += tailSold;
       reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${man(tailRevenue)}）`);
     }
   }
+
+  // 週次売上履歴を記録（グラフ用）
+  game.salesHistory.push({ week: game.week, revenue: weekRevenue, sold: weekSold });
+  if (game.salesHistory.length > 400) game.salesHistory.shift();
 
   // 受注開発の進行
   if (game.activeContract) {
@@ -1349,6 +1366,7 @@ export function loadGame(slot?: number): boolean {
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
     if (!Array.isArray(game.sales)) game.sales = [];
+    if (!Array.isArray(game.salesHistory)) game.salesHistory = [];
     // 旧セーブ移行: studio.onSale → game.sales
     for (const st of game.studios as unknown as Record<string, unknown>[]) {
       if (st.contractId === undefined) st.contractId = null;

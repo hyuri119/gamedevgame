@@ -57,6 +57,7 @@
   } from './lib/game.svelte';
   import { hardware, kumiawase, availableGenres, availableContents } from './lib/data';
   import OfficeCanvas from './lib/OfficeCanvas.svelte';
+  import SalesChart from './lib/SalesChart.svelte';
   import Modal from './lib/Modal.svelte';
 
   const weekOfMonth = $derived(((game.week - 1) % 4) + 1);
@@ -135,7 +136,7 @@
 
   $effect(() => {
     if (!auto || game.gameOver) return;
-    const t = setInterval(() => advanceWeek(), 1000 / autoSpeed);
+    const t = setInterval(() => advanceWeek(), 5000 / autoSpeed);
     return () => clearInterval(t);
   });
 
@@ -201,9 +202,10 @@
       <button onclick={() => (auto = !auto)} disabled={game.gameOver}>{auto ? '⏸ 停止' : '▶ 自動進行'}</button>
       {#if auto}
         <select bind:value={autoSpeed}>
-          <option value={1}>1x</option>
-          <option value={2}>2x</option>
-          <option value={5}>5x</option>
+          <option value={0.5}>0.5x（10秒/週）</option>
+          <option value={1}>1x（5秒/週）</option>
+          <option value={2}>2x（2.5秒/週）</option>
+          <option value={5}>5x（1秒/週）</option>
         </select>
       {/if}
       <button onclick={() => (activeTab = 'save')}>セーブ/ロード</button>
@@ -277,6 +279,11 @@
     {#if game.studios.filter((s) => s.dev).length === 0 && game.studios.filter((s) => s.completed).length === 0 && game.sales.length === 0 && !game.activeContract && !game.hwProject && !game.arcadeProject}
       <p class="pnote">進行中の開発・出荷待ちの作品はありません</p>
     {/if}
+  </section>
+
+  <section>
+    <h2>売上グラフ</h2>
+    <SalesChart />
   </section>
 
   <section>
