@@ -46,6 +46,7 @@
     hwName,
     devTarget,
     hardwarePower,
+    effectiveInstallBase,
     man,
     restock,
     disposeCatalog,
@@ -85,7 +86,6 @@
   );
 
   const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
-  const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
   const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.contractId && !s.dlc));
   const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.contractId || s.dlc));
@@ -490,7 +490,20 @@
     <Modal title="スタジオ" onclose={() => (activeTab = '')}>
       <ul>
         {#each game.studios as s (s.id)}
-          <li>{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</li>
+          <li>
+            {s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''} -
+            {#if s.dev}
+              開発中「{s.dev.name}」
+            {:else if s.completed}
+              完成品「{s.completed.name}」（出荷待ち）
+            {:else if s.contractId}
+              受注開発中
+            {:else if s.dlc}
+              DLC制作中「{s.dlc.name}」
+            {:else}
+              待機中
+            {/if}
+          </li>
         {/each}
       </ul>
       <div class="devform">
@@ -607,25 +620,30 @@
 
   {#if activeTab === 'hw'}
     <Modal title="ハード" onclose={() => (activeTab = '')}>
-      <h3>ライセンス取得（他社ハード）</h3>
-      {#if unlicensedHardware.length === 0}
-        <p>取得可能なライセンスはありません。</p>
-      {:else}
-        <table>
-          <thead>
-            <tr><th>ハード</th><th>ライセンス料</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each unlicensedHardware as h}
-              <tr>
-                <td>{h.name}（{h.realName}）</td>
-                <td>{(licenseCost(h.id) / 10000).toLocaleString()}万</td>
-                <td><button onclick={() => buyLicense(h.id)}>取得する</button></td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
+      <h3>ライセンス（他社ハード）</h3>
+      <table>
+        <thead>
+          <tr><th>ハード</th><th>発売</th><th>普及台数</th><th>性能</th><th>ライセンス料</th><th>状態</th></tr>
+        </thead>
+        <tbody>
+          {#each availableHardware as h (h.id)}
+            <tr>
+              <td>{h.name}（{h.realName}）</td>
+              <td>{h.releaseYear}</td>
+              <td>{(effectiveInstallBase(h.id, currentYear()) / 10000).toLocaleString()}万台</td>
+              <td>{hardwarePower(h.id)}</td>
+              <td>{licenseCost(h.id) > 0 ? `${(licenseCost(h.id) / 10000).toLocaleString()}万` : '不要'}</td>
+              <td>
+                {#if hasLicense(h.id)}
+                  取得済み
+                {:else}
+                  <button onclick={() => buyLicense(h.id)}>取得する</button>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
 
       <h3>自社ハード開発</h3>
       {#if canDevelopHardware()}
