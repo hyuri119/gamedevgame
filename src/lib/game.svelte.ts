@@ -624,7 +624,11 @@ export function scout() {
   const unhired = employeePool.filter(
     (e) => !game.employees.some((h) => h.id === e.id) && (e.availableFrom ?? START_YEAR) <= y
   );
-  const shuffled = [...unhired].sort(() => Math.random() - 0.5);
+  const shuffled = [...unhired];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   game.scoutCandidates = shuffled.slice(0, 4);
   if (game.scoutCandidates.length === 0) {
     game.lastReport = '雇用できる候補がいません';
