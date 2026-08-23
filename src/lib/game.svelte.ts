@@ -903,6 +903,16 @@ export function startDev(name: string, genre: string, content: string, hardwareI
   }
   const hw = findHardware(hardwareId);
   if (!hw) return;
+  if (!hasLicense(hardwareId)) {
+    game.lastReport = `${hwName(hardwareId)} のライセンスが未取得です`;
+    return;
+  }
+  if (hw.type === 'arcade') return;
+  const y = currentYear();
+  if (hw.releaseYear > y || ('endYear' in hw && hw.endYear != null && hw.endYear < y)) {
+    game.lastReport = `${hw.name} は現在開発対象にできません`;
+    return;
+  }
   studio.dev = {
     name,
     genre,
@@ -928,6 +938,17 @@ export function startSequel(hof: CompletedGame, studioId: number) {
   if (studio.dev || studio.completed || studio.contractId) return;
   if (game.employees.length === 0) {
     game.lastReport = '社員がいません。先に雇用してください';
+    return;
+  }
+  if (!hasLicense(hof.hardwareId)) {
+    game.lastReport = `${hwName(hof.hardwareId)} のライセンスが未取得です`;
+    return;
+  }
+  const hw = findHardware(hof.hardwareId);
+  if (!hw || hw.type === 'arcade') return;
+  const y = currentYear();
+  if (hw.releaseYear > y || ('endYear' in hw && hw.endYear != null && hw.endYear < y)) {
+    game.lastReport = `${hw.name} は現在開発対象にできません`;
     return;
   }
   studio.dev = {
