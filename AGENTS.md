@@ -21,7 +21,15 @@
 ## 構成
 
 - `src/` — Svelte 5 + TypeScript。UI（メニュー・表・ダイアログ）は DOM、オフィス画面のみ Canvas 2D
-  - `src/lib/game.svelte.ts` — ゲーム状態（Svelte 5 の runes `$state` で共有）とゲームロジック
+  - `src/lib/game.svelte.ts` — バレル（再exportのみ）。既存の import パスはここ経由を維持する
+  - `src/lib/state.svelte.ts` — ゲーム状態（`$state` 共有）・インターフェース・定数・土台ヘルパー
+  - `src/lib/employees.svelte.ts` — 社員（雇用・教育・進化・転職）
+  - `src/lib/studio.svelte.ts` — スタジオ・開発・受注・出展・コンテスト
+  - `src/lib/sales.svelte.ts` — 出荷・カタログ・DLC・ストア
+  - `src/lib/hardware.svelte.ts` — ハード・ライセンス・自社ハード・アーケード
+  - `src/lib/week.svelte.ts` — `advanceWeek()`（週進行・イベント）
+  - `src/lib/save.svelte.ts` — セーブ/ロード（`SAVE_VERSION` 付き）
+  - `src/lib/*.svelte` — UI コンポーネント（`App.svelte` はヘッダと配置のみ。各タブは `*Modal.svelte`）
   - `src/lib/data.ts` — `data/*.json` と `data/kumiawase.csv` の読込・パース
 - `data/` — データ駆動の JSON（ハード・競合ソフト・社員・解放年）と `kumiawase.csv`（内容×ジャンル相性表）
 - `doc/siyou.md` — マスター仕様書（すべて日本語）
@@ -60,5 +68,6 @@
   - 金額表示は `man()` で万円/億円の短縮表記
 - DLC（カタログ作品への追加コンテンツ）: DL対応ハード＋DLストア解禁年以降に「DLC制作」ボタンが出る。スタジオ1つを占有（バグ取りなし・target=power×30・制作費=power×10万円）。本数上限なしでn本目の売上期待値は `expectedSales×10%×0.6^(n-1)` で逓減、価格は本体1/4。完成時レビュー（本編スコア70%+チーム能力+乱数、40点満点）が良いほどDLC売上係数UP(0.7〜1.3)・知名度+2（32点以上）・**本編再燃**（ロングテール上限最大+30%／発売後8週は週次需要ブースト。ブースト中は在庫切れ分もDL販売で売上単価7割）。仕様詳細は `doc/siyou.md` §4.4
 - ライセンスUI: ハードモーダルで取得済みを含む全ハード一覧（発売年・現在普及台数・性能・ライセンス料・状態）を表示。スタジオモーダルは各スタジオの状況（開発中/完成品/受注中/DLC制作中/待機）を表示
+- リファクタ済み（`doc/kaizen.md` タスク1〜11完了）: `game.svelte.ts` を7モジュールに分割（バレル経由でimport互換維持）/ `App.svelte` を12コンポーネントに分割（1077行→383行）/ セーブの `SAVE_VERSION` 化と旧形式互換 / `loadGame` 副作用を `main.ts` に分離 / 続編名連番化・スカウトFisher-Yates化・開発開始時の検証追加 / biome 導入（lint: `src/lib/*.ts`・`tests/`）
 - 未実装・アイデア（`doc/siyou.md` §4 参照）: アップデート配信、運営型ゲーム（§4.6）、カジノ/ナゾプンテ再設計
 - 次回候補: バランス数値の本調整 / オフィス拡張・オフィス設計（§3.8・§4.4）
