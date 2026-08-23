@@ -337,7 +337,10 @@ export function effectiveInstallBase(id: string, year: number): number {
   const hw = findHardware(id);
   if (!hw || hw.installBase == null) return 0;
   const age = year - hw.releaseYear;
-  const factor = Math.min(1, (age + 1) / PEAK_YEARS);
+  let factor = Math.min(1, (age + 1) / PEAK_YEARS);
+  if (age >= PEAK_YEARS) {
+    factor *= Math.max(0.2, Math.pow(0.9, age - PEAK_YEARS + 1));
+  }
   return Math.round(hw.installBase * factor);
 }
 
