@@ -1728,5 +1728,3 @@ export function resetGame() {
   Object.assign(game, structuredClone(initialState));
   game.studios = initialStudios();
 }
-
-loadGame(0);
