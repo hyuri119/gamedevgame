@@ -126,6 +126,9 @@
       if (s.dev) {
         const t = devTarget(s.dev.hardwareId);
         out.push({ id: s.id, progress: s.dev.progress, target: t });
+      } else if (s.dlc) {
+        // DLC制作中も社員は机に着いて作業する
+        out.push({ id: s.id, progress: s.dlc.progress, target: s.dlc.target });
       }
     }
     return out;

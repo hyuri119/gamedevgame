@@ -61,6 +61,19 @@ export interface Studio {
   dev: DevProject | null;
   completed: CompletedGame | null;
   contractId: string | null;
+  dlc: DlcProject | null;
+}
+
+// DLC制作プロジェクト（スタジオを占有する小規模開発）
+export interface DlcProject {
+  catalogIdx: number;
+  baseName: string;
+  name: string;
+  price: number;
+  cost: number;
+  nth: number; // 何本目のDLCか（1始まり。売上逓減に使用）
+  progress: number;
+  target: number;
 }
 
 export interface OnSaleGame {
@@ -135,6 +148,21 @@ export interface CatalogGame {
   inventory: number;
   soldTotal: number;
   exhibited: boolean;
+  dlcs?: DlcInfo[];
+  dlcCapBonus?: number; // DLC評価による本編ロングテール上限の引き上げ量
+  boostWeeks?: number; // 本編再燃ブーストの残り週数
+  boostRate?: number; // ブースト中の週次追加需要率（expectedSales 比）
+}
+
+// 発売済みDLCの情報（デジタル販売のため在庫なし）
+export interface DlcInfo {
+  name: string;
+  reviewScore: number;
+  price: number;
+  expectedSales: number;
+  storeFee: number;
+  weeksOnSale: number;
+  soldTotal: number;
 }
 
 export interface Contract {
@@ -195,6 +223,13 @@ const ARCADE_DEV_TARGET = 120;
 const ARCADE_WEEKS = 24;
 const ARCADE_INCOME = 30_000;
 const PC_SALES_COEFF = 0.3; // PCはバランス上売れにくい
+const DLC_TARGET_PER_POWER = 30; // DLC開発目標値（本編 power×120 の 1/4）
+const DLC_COST_PER_POWER = 100_000; // DLC制作費（ハードpower比例）
+const DLC_PRICE_DIVISOR = 4; // DLC価格 = 本体価格の 1/4
+const DLC_SALES_BASE = 0.1; // 本編期待売上に対する1本目のDLC売上比率
+const DLC_DECAY = 0.6; // 2本目以降の逓減率
+const DLC_BOOST_WEEKS = 8; // 高評価DLCによる本編再燃ブーストの週数
+const DLC_FAME_SCORE = 32; // 知名度が上がるDLCレビュー点のしきい値
 
 export const employeePool: Employee[] = employeesData.employees;
 
@@ -295,7 +330,7 @@ export function availableStores(hardwareId: string): Store[] {
 }
 
 export function freeStudio(): Studio | undefined {
-  return game.studios.find((s) => !s.dev && !s.completed && !s.contractId);
+  return game.studios.find((s) => !s.dev && !s.completed && !s.contractId && !s.dlc);
 }
 
 export function effectiveInstallBase(id: string, year: number): number {
@@ -357,7 +392,7 @@ const initialState = {
 
 function initialStudios(): Studio[] {
   return [
-    { id: 1, name: '本社', leadId: null, dev: null, completed: null, contractId: null }
+    { id: 1, name: '本社', leadId: null, dev: null, completed: null, contractId: null, dlc: null }
   ];
 }
 
@@ -635,7 +670,8 @@ export function foundStudio(name: string, leadId: string) {
     leadId,
     dev: null,
     completed: null,
-    contractId: null
+    contractId: null,
+    dlc: null
   });
   game.lastReport = `新スタジオ「${name}」を発足しました（責任者: ${lead.name}）`;
 }
@@ -668,7 +704,8 @@ export function acquireCompany() {
     leadId: null,
     dev: null,
     completed: null,
-    contractId: null
+    contractId: null,
+    dlc: null
   });
   game.fame = Math.min(100, game.fame + 10);
   const n = game.employees.filter((e) => e.id.startsWith('acquired')).length + 1;
@@ -1025,6 +1062,114 @@ export function disposeCatalog(idx: number) {
   g.inventory = 0;
 }
 
+// ---- DLC（発売済み作品への追加コンテンツ。DLストア経由でデジタル販売） ----
+
+const DLC_NAME_TEMPLATES = [
+  '追加シナリオ',
+  '新キャラセット',
+  '追加マップ',
+  '追加ダンジョン',
+  'BGMコレクション',
+  'コスチューム集',
+  '追加モード'
+];
+
+export function canMakeDlc(g: CatalogGame): boolean {
+  return supportsDl(g.hardwareId) && availableStores(g.hardwareId).length > 0;
+}
+
+export function dlcCostOf(hardwareId: string): number {
+  return hardwarePower(hardwareId) * DLC_COST_PER_POWER;
+}
+
+export function startDlc(catalogIdx: number, studioId: number) {
+  const g = game.catalog[catalogIdx];
+  const studio = game.studios.find((s) => s.id === studioId);
+  if (!g || !studio) return;
+  if (!canMakeDlc(g)) {
+    game.lastReport = 'この作品はDLCを配信できません（DL対応ハード・DLストア解禁が必要）';
+    return;
+  }
+  if (studio.dev || studio.completed || studio.contractId || studio.dlc) return;
+  if (game.employees.length === 0) {
+    game.lastReport = '社員がいません。先に雇用してください';
+    return;
+  }
+  if (game.studios.some((s) => s.dlc?.catalogIdx === catalogIdx)) {
+    game.lastReport = `「${g.name}」のDLCはすでに制作中です`;
+    return;
+  }
+  const cost = dlcCostOf(g.hardwareId);
+  if (game.money < cost) {
+    game.lastReport = `制作費が足りません（${man(cost)} 必要）`;
+    return;
+  }
+  game.money -= cost;
+  const power = hardwarePower(g.hardwareId);
+  const nth = (g.dlcs?.length ?? 0) + 1;
+  const base = DLC_NAME_TEMPLATES[(nth - 1) % DLC_NAME_TEMPLATES.length];
+  const round = Math.floor((nth - 1) / DLC_NAME_TEMPLATES.length);
+  studio.dlc = {
+    catalogIdx,
+    baseName: g.name,
+    name: round > 0 ? `${base}${round + 1}` : base,
+    price: Math.max(100, Math.round(g.price / DLC_PRICE_DIVISOR)),
+    cost,
+    nth,
+    progress: 0,
+    target: power * DLC_TARGET_PER_POWER
+  };
+  game.lastReport = `「${g.name}」のDLC「${studio.dlc.name}」の制作を開始しました（${studio.name} / 制作費 ${man(cost)}）`;
+}
+
+export function cancelDlc(studioId: number) {
+  const studio = game.studios.find((s) => s.id === studioId);
+  if (!studio || !studio.dlc) return;
+  game.lastReport = `DLC「${studio.dlc.name}」の制作を中止しました（制作費は返還されません）`;
+  studio.dlc = null;
+}
+
+function completeDlc(studio: Studio): string {
+  const p = studio.dlc!;
+  const g = game.catalog[p.catalogIdx];
+  studio.dlc = null;
+  if (!g) return '';
+  // レビュー: 本編スコア（40点満点）を基準に、チームのおもしろさ/独創性と乱数で加減
+  const n = game.employees.length || 1;
+  const avg = (key: keyof RoleBonus) =>
+    game.employees.reduce((s, e) => s + effStats(e)[key], 0) / n;
+  const teamBonus = ((avg('fun') * 0.5 + avg('creativity') * 0.5) / 100) * 8;
+  const roll = (Math.random() - 0.3) * 6;
+  const reviewScore = Math.max(0, Math.min(40, Math.round(g.reviewScore * 0.7 + teamBonus + roll)));
+  const salesMul = 0.7 + (reviewScore / 40) * 0.6; // 0.7〜1.3倍
+  const expectedSales = Math.max(
+    50,
+    Math.round(g.expectedSales * DLC_SALES_BASE * Math.pow(DLC_DECAY, p.nth - 1) * salesMul)
+  );
+  const store = availableStores(g.hardwareId).at(-1);
+  const storeFee = store ? Math.round(p.price * store.commission) : 0;
+  const dlcs = g.dlcs ?? (g.dlcs = []);
+  dlcs.push({
+    name: p.name,
+    reviewScore,
+    price: p.price,
+    expectedSales,
+    storeFee,
+    weeksOnSale: 0,
+    soldTotal: 0
+  });
+  // 本編再燃: 評価が良いほどロングテール上限を引き上げ、週次需要もブースト
+  g.dlcCapBonus = (g.dlcCapBonus ?? 0) + (reviewScore / 40) * 0.3;
+  g.boostWeeks = DLC_BOOST_WEEKS;
+  g.boostRate = 0.01 + (reviewScore / 40) * 0.04;
+  let msg = `「${g.name}」のDLC「${p.name}」が完成しました！レビュー ${reviewScore}点`;
+  if (reviewScore >= DLC_FAME_SCORE) {
+    game.fame = Math.min(100, game.fame + 2);
+    msg += '（知名度 +2）';
+  }
+  return msg;
+}
+
 // 受注開発（外注納品）
 export function availableContracts(): Contract[] {
   return contractCatalog.filter((c) => c.minFame <= game.fame && !game.doneContracts.includes(c.id));
@@ -1199,6 +1344,19 @@ export function advanceWeek() {
     }
   }
 
+  // DLC制作進行（スタジオ占有・バグ取りなしの単純進行）
+  for (const studio of game.studios) {
+    const p = studio.dlc;
+    if (!p) continue;
+    const speed = game.employees.reduce((s, e) => s + effStats(e).speed, 0);
+    const leadBonus = studio.leadId ? 1.1 : 1.0;
+    p.progress += ((speed / 12) * (1 + 0.1 * techLevel('fast_dev')) * leadBonus);
+    if (p.progress >= p.target) {
+      const msg = completeDlc(studio);
+      if (msg) reports.push(msg);
+    }
+  }
+
   // 発売キャンペーン販売（スタジオから切り離し、販売中も次の開発が可能）
   let weekRevenue = 0;
   let weekSold = 0;
@@ -1245,16 +1403,23 @@ export function advanceWeek() {
     let tailSold = 0;
     let tailRevenue = 0;
     for (const g of game.catalog) {
-      const cap = Math.round(g.expectedSales * LONG_TAIL_CAP);
-      if (g.soldTotal >= cap || g.inventory <= 0) continue;
-      let demand = Math.round(g.expectedSales * LONG_TAIL_RATE);
-      // 話題スパイク（たまに再燃して売れる）
-      if (Math.random() < 0.01) {
-        const spike = Math.round(g.expectedSales * 0.05);
-        demand += spike;
-        reports.push(`「${g.name}」が再び話題になっています！（+${spike.toLocaleString()}本の需要）`);
+      const cap = Math.round(g.expectedSales * (LONG_TAIL_CAP + (g.dlcCapBonus ?? 0)));
+      const boosted = (g.boostWeeks ?? 0) > 0;
+      let demand = 0;
+      if (g.soldTotal < cap) {
+        demand = Math.round(g.expectedSales * LONG_TAIL_RATE);
+        // 話題スパイク（たまに再燃して売れる）
+        if (Math.random() < 0.01) {
+          const spike = Math.round(g.expectedSales * 0.05);
+          demand += spike;
+          reports.push(`「${g.name}」が再び話題になっています！（+${spike.toLocaleString()}本の需要）`);
+        }
+        // DLC効果: 発売後しばらく本編の需要も伸びる
+        if (boosted && g.boostRate) {
+          demand += Math.round(g.expectedSales * g.boostRate);
+        }
+        demand = Math.min(demand, cap - g.soldTotal);
       }
-      demand = Math.min(demand, cap - g.soldTotal);
       const sold = Math.min(g.inventory, demand);
       if (sold > 0) {
         g.inventory -= sold;
@@ -1263,12 +1428,48 @@ export function advanceWeek() {
         tailSold += sold;
         tailRevenue += sold * (g.price - g.licenseFee - g.storeFee);
       }
+      // ブースト中は在庫切れ分をDL販売で消化（デジタルのため生産費なし・売上単価7割）
+      const dlDemand = demand - sold;
+      if (dlDemand > 0 && boosted && supportsDl(g.hardwareId)) {
+        const revenue = Math.round(dlDemand * (g.price - g.licenseFee - g.storeFee) * 0.7);
+        g.soldTotal += dlDemand;
+        game.totalSales += dlDemand;
+        tailSold += dlDemand;
+        tailRevenue += revenue;
+        reports.push(`DLCの効果で「${g.name}」が再燃！在庫分を超えてDL販売 ${dlDemand.toLocaleString()}本（+${man(revenue)}）`);
+      }
+      if ((g.boostWeeks ?? 0) > 0) g.boostWeeks!--;
     }
     if (tailSold > 0) {
       game.money += tailRevenue;
       weekRevenue += tailRevenue;
       weekSold += tailSold;
       reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${man(tailRevenue)}）`);
+    }
+  }
+
+  // DLC販売（デジタルのため在庫なし・手数料のみ差し引く）
+  {
+    let dlcSold = 0;
+    let dlcRevenue = 0;
+    for (const g of game.catalog) {
+      for (const dlc of g.dlcs ?? []) {
+        if (dlc.weeksOnSale >= SALES_SHARE.length - 1) continue;
+        dlc.weeksOnSale += 1;
+        const share = SALES_SHARE[dlc.weeksOnSale] ?? 0;
+        const sold = Math.round(dlc.expectedSales * share);
+        if (sold <= 0) continue;
+        dlc.soldTotal += sold;
+        game.totalSales += sold;
+        dlcSold += sold;
+        dlcRevenue += sold * (dlc.price - dlc.storeFee);
+      }
+    }
+    if (dlcSold > 0) {
+      game.money += dlcRevenue;
+      weekRevenue += dlcRevenue;
+      weekSold += dlcSold;
+      reports.push(`DLC販売 ${dlcSold.toLocaleString()}本（+${man(dlcRevenue)}）`);
     }
   }
 
@@ -1439,6 +1640,7 @@ export function loadGame(slot?: number): boolean {
     // 旧セーブ移行: studio.onSale → game.sales
     for (const st of game.studios as unknown as Record<string, unknown>[]) {
       if (st.contractId === undefined) st.contractId = null;
+      if (st.dlc === undefined) st.dlc = null;
       if (st.completed && (st.completed as CompletedGame).storeFee === undefined) (st.completed as CompletedGame).storeFee = 0;
       if (st.onSale) {
         game.sales.push({
@@ -1455,6 +1657,7 @@ export function loadGame(slot?: number): boolean {
     for (const g of game.catalog) {
       if (g.exhibited === undefined) g.exhibited = false;
       if (g.storeFee === undefined) g.storeFee = 0;
+      if (!Array.isArray(g.dlcs)) g.dlcs = [];
     }
     if (game.event === undefined) game.event = null;
     if (game.autoExhibit === undefined) game.autoExhibit = false;

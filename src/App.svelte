@@ -57,6 +57,10 @@
     compatMark,
     exhibitStudio,
     exhibitCatalog,
+    startDlc,
+    cancelDlc,
+    canMakeDlc,
+    dlcCostOf,
     closeDecks,
     setAutoExhibit
   } from './lib/game.svelte';
@@ -83,8 +87,8 @@
   const licensedHardware = $derived(availableHardware.filter((h) => hasLicense(h.id)));
   const unlicensedHardware = $derived(availableHardware.filter((h) => !hasLicense(h.id)));
 
-  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.contractId));
-  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.contractId));
+  const idleStudios = $derived(game.studios.filter((s) => !s.dev && !s.completed && !s.contractId && !s.dlc));
+  const busyStudios = $derived(game.studios.filter((s) => s.dev || s.completed || s.contractId || s.dlc));
   const arcadeBoards = $derived(hardware.hardware.filter((h) => h.type === 'arcade'));
 
   // モーダル状態
@@ -134,6 +138,11 @@
   let shipQtys = $state<Record<number, number>>({});
   let shipStores = $state<Record<number, string>>({});
   let restockQtys = $state<Record<number, number>>({});
+
+  // DLC制作（スタジオ選択ダイアログ）
+  let dlcTarget = $state<number | null>(null);
+  const dlcTargetGame = $derived(dlcTarget != null ? game.catalog[dlcTarget] : undefined);
+  const dlcDevStudios = $derived(game.studios.filter((s) => s.dlc));
 
   // 自動進行（放置）
   let auto = $state(false);
@@ -718,12 +727,28 @@
       <h3>継続販売中の作品</h3>
       <table>
         <thead>
-          <tr><th>タイトル</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th>1本生産費</th><th>操作</th></tr>
+          <tr><th>タイトル</th><th>DLC</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th>1本生産費</th><th>操作</th></tr>
         </thead>
         <tbody>
           {#each game.catalog as g, i (g.name)}
             <tr>
               <td>{g.name}</td>
+              <td>
+                {#if dlcDevStudios.some((s) => s.dlc?.catalogIdx === i)}
+                  {@const st = dlcDevStudios.find((s) => s.dlc?.catalogIdx === i)!}
+                  {@const p = st.dlc!}
+                  制作中「{p.name}」{Math.min(100, Math.floor((p.progress / p.target) * 100))}%
+                  <button onclick={() => cancelDlc(st.id)}>中止</button>
+                {:else}
+                  {(g.dlcs?.length ?? 0)}本
+                  {#if canMakeDlc(g)}
+                    <button onclick={() => (dlcTarget = i)}>DLC制作</button>
+                  {/if}
+                {/if}
+                {#each g.dlcs ?? [] as d (d.name)}
+                  <div class="desc">「{d.name}」{d.reviewScore}点 / 累計{d.soldTotal.toLocaleString()}本</div>
+                {/each}
+              </td>
               <td>{g.inventory.toLocaleString()}本</td>
               <td>{g.soldTotal.toLocaleString()}本</td>
               <td>{g.reviewScore}点</td>
@@ -760,6 +785,20 @@
       {:else}
         <p>まだ発売した作品がありません。</p>
       {/if}
+    </Modal>
+  {/if}
+
+  {#if dlcTarget != null && dlcTargetGame}
+    <Modal title={`DLC制作 - 「${dlcTargetGame.name}」`} onclose={() => (dlcTarget = null)}>
+      <p>制作するスタジオを選んでください（制作費 {man(dlcCostOf(dlcTargetGame.hardwareId))}・価格 {man(Math.max(100, Math.round(dlcTargetGame.price / 4)))}）。</p>
+      {#each idleStudios as s (s.id)}
+        <div class="prow">
+          <span class="plabel">{s.name}{s.leadId ? `（責任者: ${empName(s.leadId)}）` : ''}</span>
+          <button onclick={() => { startDlc(dlcTarget!, s.id); dlcTarget = null; }}>制作開始</button>
+        </div>
+      {:else}
+        <p class="pnote">空いているスタジオがありません。本編開発や受注が終わるまでお待ちください。</p>
+      {/each}
     </Modal>
   {/if}
 
