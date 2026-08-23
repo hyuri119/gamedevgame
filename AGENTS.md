@@ -10,7 +10,7 @@
 - `npm run check` — 型チェック（svelte-check）。undefined アクセス等の見落としを検出するので、変更後は必ず実行
 - `npm run test` — vitest によるバランスシミュレーションテスト（`tests/`）。「10年で黒字化」「40年破綻しない」等の健全性チェック
 - `npm run test:watch` — テストの watch 実行
-- lint / formatter は未設定。必要になったら追加する
+- `npm run lint` — biome による lint / フォーマットチェック（対象: `src/lib/*.ts`・`tests/`）。整形は `npm run format`（`biome format --write .`）
 
 ## コミット
 
