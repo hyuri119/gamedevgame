@@ -913,6 +913,11 @@ export function startDev(name: string, genre: string, content: string, hardwareI
   game.lastReport = `「${name}」の開発を開始しました（${studio.name} / ${genre} × ${content} / ${hw.name}）`;
 }
 
+const seqName = (base: string): string => {
+  const m = base.match(/^(.*?)(\d+)$/);
+  return m ? `${m[1]}${Number(m[2]) + 1}` : `${base}2`;
+};
+
 export function startSequel(hof: CompletedGame, studioId: number) {
   const studio = game.studios.find((s) => s.id === studioId);
   if (!studio) return;
@@ -922,7 +927,7 @@ export function startSequel(hof: CompletedGame, studioId: number) {
     return;
   }
   studio.dev = {
-    name: hof.name + '2',
+    name: seqName(hof.name),
     genre: hof.genre,
     content: hof.content,
     hardwareId: hof.hardwareId,
