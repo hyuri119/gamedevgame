@@ -21,6 +21,7 @@ import {
   month,
   availableStores,
   supportsDl,
+  loadGame,
   man
 } from '../src/lib/game.svelte';
 import { kumiawase, availableGenres } from '../src/lib/data';
@@ -63,6 +64,33 @@ function weeksUntil(pred: () => boolean, maxWeeks: number): number {
 }
 
 describe('バランスシミュレーション', () => {
+  it('旧形式セーブ（バージョンなし）を読み込める', () => {
+    reset();
+    const legacy = JSON.stringify({
+      money: 123_456_789,
+      week: 30,
+      fame: 5,
+      studios: [
+        { id: 1, name: '本社', leadId: null, dev: null, completed: null, contractId: null, dlc: null }
+      ],
+      employees: [],
+      techs: {},
+      sales: [],
+      salesHistory: [],
+      catalog: [],
+      saveSlot: 0
+    });
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (k === 'gamedev-sim-save-0' ? legacy : null),
+      setItem: () => {},
+      removeItem: () => {}
+    });
+    expect(loadGame(0)).toBe(true);
+    expect(game.money).toBe(123_456_789);
+    expect(game.week).toBe(30);
+    expect(game.studios.length).toBe(1);
+  });
+
   it('序盤（1983〜）PC開発で黒字化でき10年破綻しない', () => {
     reset();
     const initialMoney = game.money;

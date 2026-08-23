@@ -213,6 +213,7 @@ const COMPAT_REVIEW: Record<string, number> = { '☆': 4, '◎': 2, '◯': 1, '�
 const HALL_OF_FAME_SCORE = 32;
 const SAVE_KEY_PREFIX = 'gamedev-sim-save';
 const SAVE_SLOTS = 3;
+const SAVE_VERSION = 1;
 const LEGACY_SAVE_KEY = 'gamedev-sim-save';
 const MAX_TENANTS = 3;
 const MAX_STUDIOS = 5;
@@ -1654,7 +1655,7 @@ export function saveGame(slot?: number) {
   if (typeof localStorage === 'undefined') return;
   const s = slot ?? game.saveSlot;
   game.saveSlot = s;
-  localStorage.setItem(slotKey(s), JSON.stringify($state.snapshot(game)));
+  localStorage.setItem(slotKey(s), JSON.stringify({ version: SAVE_VERSION, state: $state.snapshot(game) }));
 }
 
 export function loadGame(slot?: number): boolean {
@@ -1664,7 +1665,9 @@ export function loadGame(slot?: number): boolean {
     let raw = localStorage.getItem(slotKey(s));
     if (!raw && s === 0) raw = localStorage.getItem(LEGACY_SAVE_KEY);
     if (!raw) return false;
-    Object.assign(game, JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    const state = parsed && typeof parsed === 'object' && parsed.version !== undefined ? parsed.state : parsed;
+    Object.assign(game, state);
     game.saveSlot = s;
     if (Array.isArray(game.techs)) game.techs = {};
     if (!Array.isArray(game.studios) || game.studios.length === 0) game.studios = initialStudios();
@@ -1711,10 +1714,11 @@ export function peekSlot(slot: number): string {
     const raw = localStorage.getItem(slotKey(slot)) ?? (slot === 0 ? localStorage.getItem(LEGACY_SAVE_KEY) : null);
     if (!raw) return '空き';
     const d = JSON.parse(raw);
-    const w = d.week ?? 1;
+    const st = d && typeof d === 'object' && d.version !== undefined ? d.state : d;
+    const w = st.week ?? 1;
     const y = START_YEAR + Math.floor((w - 1) / WEEKS_PER_YEAR);
     const m = Math.floor(((w - 1) % WEEKS_PER_YEAR) / 4) + 1;
-    return `${y}年${m}月 / 資金 ${man(Number(d.money ?? 0))} / 知名度 ${d.fame ?? 0}`;
+    return `${y}年${m}月 / 資金 ${man(Number(st.money ?? 0))} / 知名度 ${st.fame ?? 0}`;
   } catch {
     return '空き';
   }
