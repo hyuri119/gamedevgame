@@ -1,6 +1,7 @@
 export * from './state.svelte'
 export * from './employees.svelte'
 export * from './hardware.svelte'
+export * from './office.svelte'
 export * from './sales.svelte'
 export * from './studio.svelte'
 export * from './save.svelte'

@@ -7,7 +7,15 @@
     buyTech,
     techLevel,
     techDesc,
-    techCatalog
+    techCatalog,
+    currentOffice,
+    maxEmployees,
+    officeRent,
+    officeDesks,
+    officeCatalog,
+    moveOfficeReason,
+    moveOffice,
+    man
   } from './game.svelte';
   import Modal from './Modal.svelte';
 
@@ -15,6 +23,35 @@
 </script>
 
 <Modal title="経営（施設・技術）" onclose={onclose}>
+  <h3>オフィス</h3>
+  <p class="pnote">
+    現在: {currentOffice().name} / 社員上限 {maxEmployees()}人 / 月額家賃 {man(officeRent() * 4)} / 机数 {officeDesks()}
+  </p>
+  <table>
+    <thead>
+      <tr><th>オフィス</th><th>社員上限</th><th>月額家賃</th><th>移転費</th><th></th></tr>
+    </thead>
+    <tbody>
+      {#each officeCatalog as o (o.id)}
+        <tr>
+          <td>{o.name}</td>
+          <td>{o.capacity}人</td>
+          <td>{man(o.rent * 4)}</td>
+          <td>{o.moveCost === 0 ? '—' : man(o.moveCost)}</td>
+          <td>
+            {#if game.officeLevel === officeCatalog.indexOf(o)}
+              現在
+            {:else if moveOfficeReason(officeCatalog.indexOf(o)) === null}
+              <button onclick={() => moveOffice(officeCatalog.indexOf(o))}>移転</button>
+            {:else}
+              <span class="pnote">{moveOfficeReason(officeCatalog.indexOf(o))}</span>
+            {/if}
+          </td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+
   <h3>テナント（{game.tenants.length}/3）</h3>
   <table>
     <thead>
@@ -87,5 +124,9 @@
   }
   button {
     cursor: pointer;
+  }
+  .pnote {
+    color: #888;
+    font-size: 0.85rem;
   }
 </style>

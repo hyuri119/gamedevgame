@@ -11,7 +11,10 @@
     hasLicense,
     man,
     devTarget,
-    setAutoExhibit
+    setAutoExhibit,
+    maxEmployees,
+    currentOffice,
+    weekOfMonth
   } from './lib/game.svelte';
   import { hardware } from './lib/data';
   import OfficeCanvas from './lib/OfficeCanvas.svelte';
@@ -28,8 +31,6 @@
   import AchievementsModal from './lib/AchievementsModal.svelte';
   import SaveModal from './lib/SaveModal.svelte';
   import DecksModal from './lib/DecksModal.svelte';
-
-  const weekOfMonth = $derived(((game.week - 1) % 4) + 1);
 
   const availableHardware = $derived(
     hardware.hardware.filter(
@@ -86,10 +87,11 @@
     <h1>ゲーム会社経営シミュレーション</h1>
     <div class="bar">
       <span class="money">資金: {man(game.money)}</span>
-      <span>{year()}年 {month()}月 {weekOfMonth}週目</span>
+      <span>{year()}年 {month()}月 {weekOfMonth()}週目</span>
       <span>累計販売: {game.totalSales.toLocaleString()}本</span>
       <span>知名度: {game.fame}</span>
       <span>スタジオ: {game.studios.length}</span>
+      <span>オフィス: {currentOffice().name}（社員 {game.employees.length}/{maxEmployees()}）</span>
     </div>
     <p class="hint">▶ 次にやること: {hint}</p>
     <div class="controls">

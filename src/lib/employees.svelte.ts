@@ -9,6 +9,7 @@ import {
   type RoleDef,
   type Employee,
 } from './state.svelte'
+import { maxEmployees, currentOffice } from './office.svelte'
 
 const roles = rolesData.roles as Record<string, RoleDef>
 
@@ -125,6 +126,14 @@ export function hire(id: string) {
   const emp = employeePool.find((e) => e.id === id)
   if (!emp) return
   if (game.employees.some((e) => e.id === id)) return
+  if (game.employees.length >= maxEmployees()) {
+    game.lastReport = `オフィスが手狭です（${currentOffice().name} は最大${maxEmployees()}人）。移転してください`
+    return
+  }
+  if (emp.role === 'スーパーハッカー' && game.officeLevel < 2) {
+    game.lastReport = 'スーパーハッカーを雇うには大規模オフィスが必要です'
+    return
+  }
   if (game.money < emp.contract) {
     game.lastReport = `契約金が足りません（${emp.name} は ${man(emp.contract)} 必要）`
     return

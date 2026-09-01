@@ -29,6 +29,7 @@ import {
   fameCoeff,
 } from './hardware.svelte'
 import { effStats } from './employees.svelte'
+import { maxEmployees } from './office.svelte'
 
 const STUDIO_COST = 300_000_000
 const EXHIBIT_FEE = 5_000_000
@@ -102,20 +103,25 @@ export function acquireCompany() {
   })
   game.fame = Math.min(100, game.fame + 10)
   const n = game.employees.filter((e) => e.id.startsWith('acquired')).length + 1
-  game.employees.push({
-    id: 'acquired' + n,
-    name: `買収した社員${n}`,
-    role: 'プログラマ',
-    level: 2,
-    fun: 20,
-    creativity: 15,
-    graphics: 20,
-    music: 10,
-    speed: 20,
-    salary: 3_000_000,
-    contract: 0,
-  })
-  game.lastReport = '他社を買収し、子会社として運用します（知名度 +10、社員1名を引き継ぎ）'
+  if (game.employees.length < maxEmployees()) {
+    game.employees.push({
+      id: 'acquired' + n,
+      name: `買収した社員${n}`,
+      role: 'プログラマ',
+      level: 2,
+      fun: 20,
+      creativity: 15,
+      graphics: 20,
+      music: 10,
+      speed: 20,
+      salary: 3_000_000,
+      contract: 0,
+    })
+    game.lastReport = '他社を買収し、子会社として運用します（知名度 +10、社員1名を引き継ぎ）'
+  } else {
+    game.lastReport =
+      '他社を買収し、子会社として運用します（知名度 +10、社員の上限に達したため引き継ぎなし）'
+  }
 }
 
 export function startDev(
@@ -398,11 +404,13 @@ export function holdContest(): string | null {
   if (gfx.graphics >= 70 && gfx !== best) {
     fame += 5
     prize += 5_000_000
+    game.awards.design += 1
     msgs.push(`「${gfx.name}」がデザイン賞受賞！`)
   }
   if (mus.music >= 70 && mus !== best) {
     fame += 5
     prize += 5_000_000
+    game.awards.music += 1
     msgs.push(`「${mus.name}」が音楽賞受賞！`)
   }
   if (worst.reviewScore < 10) {

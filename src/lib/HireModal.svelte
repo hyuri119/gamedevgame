@@ -11,7 +11,8 @@
     jobLevel,
     effStats,
     canSwitchJob,
-    switchJob
+    switchJob,
+    maxEmployees
   } from './game.svelte';
   import Modal from './Modal.svelte';
 
@@ -23,6 +24,7 @@
 
 <Modal title="社員" onclose={onclose}>
   <h3>スカウト（雇用）</h3>
+  <p class="pnote">小規模オフィスは最大4人まで。オフィスを移転すると雇用人数を増やせます。</p>
   <button onclick={scout}>スカウトする（候補を探す）</button>
   {#if game.scoutCandidates.length > 0}
     <table>
@@ -41,7 +43,7 @@
             <td>{e.speed}</td>
             <td>{(e.contract / 10000).toLocaleString()}万</td>
             <td>{(e.salary / 10000).toLocaleString()}万</td>
-            <td><button onclick={() => hire(e.id)}>雇用</button></td>
+            <td><button onclick={() => hire(e.id)} disabled={game.employees.length >= maxEmployees() || (e.role === 'スーパーハッカー' && game.officeLevel < 2)}>雇用</button></td>
           </tr>
         {/each}
       </tbody>
@@ -50,7 +52,7 @@
     <p>「スカウトする」を押すと候補が表示されます。</p>
   {/if}
 
-  <h3>雇用済み社員（{game.employees.length}人）</h3>
+  <h3>雇用済み社員（{game.employees.length}/{maxEmployees()}人）</h3>
   <table>
     <thead>
       <tr>

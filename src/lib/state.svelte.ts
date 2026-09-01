@@ -286,6 +286,9 @@ const initialState = {
   totalSales: 0,
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
+  officeLevel: 0,
+  loungeLevel: 1,
+  awards: { design: 0, music: 0 },
   salaryYear: 1,
   event: null as GameEvent | null,
   autoExhibit: false,
@@ -311,6 +314,10 @@ export function year(): number {
 
 export function month(): number {
   return Math.floor(((game.week - 1) % WEEKS_PER_YEAR) / 4) + 1
+}
+
+export function weekOfMonth(): number {
+  return Math.floor((game.week - 1) % 4) + 1
 }
 
 export function currentYear(): number {

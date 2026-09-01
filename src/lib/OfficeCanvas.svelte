@@ -1,16 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { game, man, devTarget } from './game.svelte';
+  import { game, man, devTarget, officeDesks } from './game.svelte';
 
   const W = 800;
   const H = 360;
   let canvas: HTMLCanvasElement;
 
-  const DESK_COUNT = 6;
   const DESK_W = 90;
   const DESK_H = 40;
-  const DESK_Y = H - 70;
-  const DESK_X = (i: number) => 80 + i * 115;
 
   interface Agent {
     x: number;
@@ -233,28 +230,34 @@
 
     // 机（デスクモニタ付き）
     const work = workingStudios();
-    for (let i = 0; i < DESK_COUNT; i++) {
-      const x = DESK_X(i);
+    const total = officeDesks();
+    const rows = total > 6 ? 2 : 1;
+    const perRow = Math.ceil(total / rows);
+    const deskX = (i: number) => 80 + (i % perRow) * 115;
+    const deskY = (row: number) => H - 70 - row * 80;
+    for (let i = 0; i < total; i++) {
+      const x = deskX(i);
+      const y = deskY(Math.floor(i / perRow));
       const isUsed = i < work.length;
       ctx.fillStyle = isUsed ? '#b89a6f' : '#cbb896';
-      ctx.fillRect(x, DESK_Y, DESK_W, DESK_H);
+      ctx.fillRect(x, y, DESK_W, DESK_H);
       // デスクモニタ
       ctx.fillStyle = '#3a3a42';
-      ctx.fillRect(x + 14, DESK_Y - 16, 30, 18);
+      ctx.fillRect(x + 14, y - 16, 30, 18);
       ctx.fillStyle = isUsed ? '#6ee7ff' : '#1f3a4a';
-      ctx.fillRect(x + 17, DESK_Y - 13, 24, 12);
+      ctx.fillRect(x + 17, y - 13, 24, 12);
       if (isUsed) {
         ctx.fillStyle = '#0a1a22';
         ctx.font = '8px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText('░░', x + 20, DESK_Y - 5);
-        ctx.fillText('░░', x + 20, DESK_Y - 1);
+        ctx.fillText('░░', x + 20, y - 5);
+        ctx.fillText('░░', x + 20, y - 1);
       }
       ctx.fillStyle = '#555';
-      ctx.fillRect(x + 44, DESK_Y + 8, 14, 4);
-      ctx.fillRect(x + 50, DESK_Y + 12, 8, 16);
+      ctx.fillRect(x + 44, y + 8, 14, 4);
+      ctx.fillRect(x + 50, y + 12, 8, 16);
       ctx.fillStyle = '#6b5a3f';
-      ctx.fillRect(x + 8, DESK_Y - 22, 16, 7);
+      ctx.fillRect(x + 8, y - 22, 16, 7);
     }
 
     // 社員イベント検出（money 増減・入社・完成）
@@ -298,10 +301,11 @@
     }
 
     const deskSeatPos = (deskIdx: number, seat: number) => {
-      const cx = DESK_X(deskIdx) + DESK_W / 2 - 6;
-      if (seat === 0) return { x: cx, y: DESK_Y - 12 };
-      if (seat === 1) return { x: cx - 26, y: DESK_Y + 12 };
-      return { x: cx + 26, y: DESK_Y + 12 };
+      const cx = deskX(deskIdx) + DESK_W / 2 - 6;
+      const cy = deskY(Math.floor(deskIdx / perRow));
+      if (seat === 0) return { x: cx, y: cy - 12 };
+      if (seat === 1) return { x: cx - 26, y: cy + 12 };
+      return { x: cx + 26, y: cy + 12 };
     };
 
     let ci = 0;

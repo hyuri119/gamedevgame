@@ -4,6 +4,7 @@ import {
   currentYear,
   month,
   year,
+  weekOfMonth,
   man,
   SALES_SHARE,
   ARCADE_DEV_TARGET,
@@ -11,6 +12,7 @@ import {
   ARCADE_INCOME,
 } from './state.svelte'
 import { effStats } from './employees.svelte'
+import { officeRent } from './office.svelte'
 import {
   devTarget,
   completeHardware,
@@ -274,6 +276,13 @@ export function advanceWeek() {
       game.money -= totalSalary
       reports.push(`4月の年俸支払い ${man(totalSalary)}`)
     }
+  }
+
+  // オフィス家賃（月の第1週に月額家賃を支払う）
+  if (weekOfMonth() === 1) {
+    const rent = officeRent() * 4
+    game.money -= rent
+    reports.push(`オフィス家賃 ${man(rent)}`)
   }
 
   // ランダムイベント: 雑誌取材

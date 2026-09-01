@@ -77,6 +77,9 @@ export function loadGame(slot?: number): boolean {
     if (game.event === undefined) game.event = null
     if (game.autoExhibit === undefined) game.autoExhibit = false
     if (game.exhibitYear === undefined) game.exhibitYear = 0
+    if (game.officeLevel === undefined) game.officeLevel = 0
+    if (game.loungeLevel === undefined) game.loungeLevel = 1
+    if (!game.awards) game.awards = { design: 0, music: 0 }
     // 旧セーブ移行: 職業レベルの初期化
     for (const e of game.employees) {
       if (!e.jobLevels || Object.keys(e.jobLevels).length === 0) e.jobLevels = { [e.role]: 1 }
