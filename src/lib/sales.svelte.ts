@@ -15,7 +15,7 @@ import {
   productionCost,
   hardwarePower,
 } from './hardware.svelte'
-import { effStats } from './employees.svelte'
+import { effStats, activeEmployees } from './employees.svelte'
 
 const DLC_TARGET_PER_POWER = 30 // DLC開発目標値（本編 power×120 の 1/4）
 const DLC_COST_PER_POWER = 100_000 // DLC制作費（ハードpower比例）
@@ -165,8 +165,9 @@ export function completeDlc(studio: Studio): string {
   studio.dlc = null
   if (!g) return ''
   // レビュー: 本編スコア（40点満点）を基準に、チームのおもしろさ/独創性と乱数で加減
-  const n = game.employees.length || 1
-  const avg = (key: keyof RoleBonus) => game.employees.reduce((s, e) => s + effStats(e)[key], 0) / n
+  const act = activeEmployees()
+  const n = act.length || 1
+  const avg = (key: keyof RoleBonus) => act.reduce((s, e) => s + effStats(e)[key], 0) / n
   const teamBonus = ((avg('fun') * 0.5 + avg('creativity') * 0.5) / 100) * 8
   const roll = (Math.random() - 0.3) * 6
   const reviewScore = Math.max(0, Math.min(40, Math.round(g.reviewScore * 0.7 + teamBonus + roll)))

@@ -15,6 +15,10 @@
     officeCatalog,
     moveOfficeReason,
     moveOffice,
+    loungeRecovery,
+    loungeRelief,
+    loungeUpgradeCost,
+    upgradeLounge,
     man
   } from './game.svelte';
   import Modal from './Modal.svelte';
@@ -51,6 +55,12 @@
       {/each}
     </tbody>
   </table>
+
+  <h3>休憩室（Lv{game.loungeLevel}）</h3>
+  <p class="pnote">
+    休息時の回復 {loungeRecovery()}/週 / ストレス上昇軽減 {Math.round(loungeRelief() * 100)}% / 次のグレード改修費用 {loungeUpgradeCost() === null ? '最高グレード' : man(loungeUpgradeCost()!)}
+  </p>
+  <button onclick={upgradeLounge} disabled={loungeUpgradeCost() === null || game.money < (loungeUpgradeCost() ?? Infinity)}>休憩室を改修（Lv{game.loungeLevel + 1}）</button>
 
   <h3>テナント（{game.tenants.length}/3）</h3>
   <table>

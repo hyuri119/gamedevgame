@@ -228,6 +228,33 @@
       ctx.fill();
     }
 
+    // 休憩エリア（ソファ）。グレードに応じて豪華に
+    const sofaX = 20;
+    const sofaY = H - 44;
+    const sofaW = 130;
+    const sofaH = 30;
+    const sofaColors = ['#8d6a9f', '#5b8fb9', '#e07a5f', '#3d84a8', '#f2cc8f'];
+    ctx.fillStyle = sofaColors[Math.min(game.loungeLevel - 1, sofaColors.length - 1)];
+    ctx.fillRect(sofaX, sofaY, sofaW, sofaH);
+    ctx.fillRect(sofaX + 6, sofaY - 10, sofaW - 12, 12);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(sofaX, sofaY + sofaH - 6, sofaW, 6);
+    for (let c = 0; c < game.loungeLevel; c++) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(sofaX + 16 + c * 26, sofaY + 8, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#eac435';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    for (let s = 0; s < game.loungeLevel; s++) {
+      ctx.fillText('★', sofaX + 22 + s * 22, sofaY - 18);
+    }
+    ctx.fillStyle = '#999';
+    ctx.font = '9px sans-serif';
+    ctx.fillText(`休憩室 Lv${game.loungeLevel}`, sofaX + sofaW / 2, sofaY + sofaH + 12);
+
     // 机（デスクモニタ付き）
     const work = workingStudios();
     const total = officeDesks();
@@ -290,14 +317,15 @@
     const empIds = game.employees.map((e) => e.id);
     removeMissing(empIds);
 
-    // 開発中の机へ社員を割り当て（1机あたり最大3人、机数ぶんまで）
+    // 開発中の机へ社員を割り当て（1机あたり最大3人、机数ぶんまで。休養中は除外）
     const MAX_PER_DESK = 3;
     const assign = new Map<string, { deskIdx: number; seat: number }>();
     const deskCount = Math.max(work.length, 1);
-    for (let i = 0; i < game.employees.length; i++) {
+    const workIds = game.employees.filter((e) => !e.resting).map((e) => e.id);
+    for (let i = 0; i < workIds.length; i++) {
       const seat = Math.floor(i / deskCount);
       const deskIdx = i % deskCount;
-      if (work.length > 0 && seat < MAX_PER_DESK) assign.set(empIds[i], { deskIdx, seat });
+      if (work.length > 0 && seat < MAX_PER_DESK) assign.set(workIds[i], { deskIdx, seat });
     }
 
     const deskSeatPos = (deskIdx: number, seat: number) => {
@@ -313,7 +341,23 @@
       const a = ensureAgent(e.id, COLORS[ci % COLORS.length]);
       ci++;
       const as = assign.get(e.id);
-      if (as) {
+      if (e.resting) {
+        // 休養中: 休憩エリアのソファへ
+        a.tx = sofaX + 20 + ((ci % 4) * 28);
+        a.ty = sofaY - 14;
+        a.vx = 0;
+        a.vy = 0;
+        const spd = 2;
+        const dx = a.tx - a.x;
+        const dy = a.ty - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 2) {
+          a.x += (dx / dist) * spd;
+          a.y += (dy / dist) * spd;
+        } else {
+          a.bob += 1;
+        }
+      } else if (as) {
         // 開発中: 机に着いて作業
         const tgt = deskSeatPos(as.deskIdx, as.seat);
         a.tx = tgt.x;
@@ -431,6 +475,13 @@
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(e.name.slice(0, 1), a.x, a.y + bobY + 20);
+
+      // 疲労マーク（ストレス70以上）
+      if ((e.stress ?? 0) >= 70) {
+        ctx.fillStyle = '#c0392b';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('!', a.x + 10, a.y + bobY - 18);
+      }
 
       if (isWork && as!.seat === 0) {
         // リーダーの頭上に進捗バーと作業アニメーション

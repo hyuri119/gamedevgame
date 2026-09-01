@@ -28,7 +28,7 @@ import {
   marketGrowth,
   fameCoeff,
 } from './hardware.svelte'
-import { effStats } from './employees.svelte'
+import { effStats, activeEmployees } from './employees.svelte'
 import { maxEmployees } from './office.svelte'
 
 const STUDIO_COST = 300_000_000
@@ -116,6 +116,7 @@ export function acquireCompany() {
       speed: 20,
       salary: 3_000_000,
       contract: 0,
+      stress: 0,
     })
     game.lastReport = '他社を買収し、子会社として運用します（知名度 +10、社員1名を引き継ぎ）'
   } else {
@@ -314,9 +315,10 @@ export function completeDev(studio: Studio) {
   const hw = findHardware(d.hardwareId)!
   const power = hardwarePower(d.hardwareId)
   const cap = power * 10
-  const n = game.employees.length || 1
+  const act = activeEmployees()
+  const n = act.length || 1
 
-  const avg = (key: keyof RoleBonus) => game.employees.reduce((s, e) => s + effStats(e)[key], 0) / n
+  const avg = (key: keyof RoleBonus) => act.reduce((s, e) => s + effStats(e)[key], 0) / n
   const clamp100 = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
   const fun = clamp100(avg('fun') * 1.2 + d.bonus.fun)

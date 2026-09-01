@@ -19,6 +19,8 @@ export interface Employee {
   contract: number
   availableFrom?: number
   jobLevels?: Record<string, number>
+  stress?: number
+  resting?: boolean
 }
 
 export interface DevProject {

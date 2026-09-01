@@ -11,8 +11,8 @@ import {
   ARCADE_WEEKS,
   ARCADE_INCOME,
 } from './state.svelte'
-import { effStats } from './employees.svelte'
-import { officeRent } from './office.svelte'
+import { effStats, activeEmployees } from './employees.svelte'
+import { officeRent, updateStress } from './office.svelte'
 import {
   devTarget,
   completeHardware,
@@ -36,7 +36,7 @@ export function advanceWeek() {
     // 開発進行
     if (studio.dev) {
       const d = studio.dev
-      const speed = game.employees.reduce((s, e) => s + effStats(e).speed, 0)
+      const speed = activeEmployees().reduce((s, e) => s + effStats(e).speed, 0)
       const leadBonus = studio.leadId ? 1.1 : 1.0
       if (d.stage === '開発') {
         const devSpeed = (1 + 0.1 * techLevel('fast_dev')) * leadBonus
@@ -65,7 +65,7 @@ export function advanceWeek() {
   for (const studio of game.studios) {
     const p = studio.dlc
     if (!p) continue
-    const speed = game.employees.reduce((s, e) => s + effStats(e).speed, 0)
+    const speed = activeEmployees().reduce((s, e) => s + effStats(e).speed, 0)
     const leadBonus = studio.leadId ? 1.1 : 1.0
     p.progress += (speed / 12) * (1 + 0.1 * techLevel('fast_dev')) * leadBonus
     if (p.progress >= p.target) {
@@ -202,7 +202,7 @@ export function advanceWeek() {
   if (game.activeContract) {
     const c = game.activeContract
     const studio = game.studios.find((s) => s.id === c.studioId)
-    const speed = game.employees.reduce((s, e) => s + effStats(e).speed, 0)
+    const speed = activeEmployees().reduce((s, e) => s + effStats(e).speed, 0)
     const leadBonus = studio?.leadId ? 1.1 : 1.0
     c.progress += (speed / 10) * leadBonus
     c.elapsed += 1
@@ -243,7 +243,7 @@ export function advanceWeek() {
   // アーケード開発の進行
   if (game.arcadeProject) {
     const p = game.arcadeProject
-    const speed = game.employees.reduce((s, e) => s + effStats(e).speed, 0)
+    const speed = activeEmployees().reduce((s, e) => s + effStats(e).speed, 0)
     if (p.stage === '開発') {
       p.progress += speed / 12
       p.bug += Math.random() * 1.5
@@ -257,6 +257,9 @@ export function advanceWeek() {
       p.bug = Math.max(0, p.bug - (speed / 12) * 0.6 * (1 + 0.5 * techLevel('bug_analysis')))
     }
   }
+
+  // ストレス更新（休憩室の回復・過労で休養）
+  reports.push(...updateStress())
 
   // アーケード稼働収益（インカム）
   for (const ag of game.arcadeGames) {

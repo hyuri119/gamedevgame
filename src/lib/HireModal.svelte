@@ -57,7 +57,7 @@
     <thead>
       <tr>
         <th>名前</th><th>役職</th><th>Lv</th>
-        <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th>操作</th>
+        <th>おも</th><th>独創</th><th>画</th><th>音</th><th>速度</th><th>年俸</th><th>ストレス</th><th>操作</th>
       </tr>
     </thead>
     <tbody>
@@ -69,6 +69,7 @@
           <td>{e.level}</td>
           <td>{es.fun}</td><td>{es.creativity}</td><td>{es.graphics}</td><td>{es.music}</td>
           <td>{es.speed}</td><td>{(e.salary / 10000).toLocaleString()}万</td>
+          <td>{Math.round(e.stress ?? 0)}{e.resting ? '（休養中）' : ''}</td>
           <td>
             <button onclick={() => train(e.id)} disabled={e.level >= 10}>教育</button>
             {#if canEvolve(e)}
@@ -92,6 +93,7 @@
     </tbody>
   </table>
   <p class="pnote">能力値は職業ボーナス込みの実効値です。教育・進化で基礎能力と職業レベルが上がります。</p>
+  <p class="pnote">ストレスは開発中に上昇し、休憩室のグレードで回復率が変わります。100になると休養に入り開発から外れます。</p>
 </Modal>
 
 <style>

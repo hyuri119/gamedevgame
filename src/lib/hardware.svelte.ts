@@ -17,7 +17,7 @@ import {
   type RoleBonus,
   type Store,
 } from './state.svelte'
-import { effStats } from './employees.svelte'
+import { effStats, activeEmployees } from './employees.svelte'
 
 const DEV_TARGET_PER_POWER = 120
 const PEAK_YEARS = 5
@@ -191,8 +191,9 @@ export function completeArcade(): string {
   const p = game.arcadeProject!
   const power = hardwarePower(p.boardId)
   const cap = power * 10
-  const n = game.employees.length || 1
-  const avg = (key: keyof RoleBonus) => game.employees.reduce((s, e) => s + effStats(e)[key], 0) / n
+  const act = activeEmployees()
+  const n = act.length || 1
+  const avg = (key: keyof RoleBonus) => act.reduce((s, e) => s + effStats(e)[key], 0) / n
   const clamp100 = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
   const fun = clamp100(avg('fun') * 1.2)

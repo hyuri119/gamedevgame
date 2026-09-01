@@ -27,13 +27,20 @@ export function effStats(emp: Employee): RoleBonus {
   const lv = jobLevel(emp)
   const b = roles[emp.role]?.bonus ?? { fun: 0, creativity: 0, graphics: 0, music: 0, speed: 0 }
   const cap = (v: number) => Math.min(100, Math.max(0, v))
+  const s = emp.stress ?? 0
+  const mul = s <= 50 ? 1 : 1 - ((s - 50) / 50) * 0.15
   return {
-    fun: cap(emp.fun + b.fun * lv),
-    creativity: cap(emp.creativity + b.creativity * lv),
-    graphics: cap(emp.graphics + b.graphics * lv),
-    music: cap(emp.music + b.music * lv),
-    speed: cap(emp.speed + b.speed * lv),
+    fun: cap((emp.fun + b.fun * lv) * mul),
+    creativity: cap((emp.creativity + b.creativity * lv) * mul),
+    graphics: cap((emp.graphics + b.graphics * lv) * mul),
+    music: cap((emp.music + b.music * lv) * mul),
+    speed: cap((emp.speed + b.speed * lv) * mul),
   }
+}
+
+export function activeEmployees(): Employee[] {
+  const act = game.employees.filter((e) => !e.resting)
+  return act.length > 0 ? act : game.employees
 }
 
 export function evolveOptions(emp: Employee): string[] {
@@ -139,7 +146,7 @@ export function hire(id: string) {
     return
   }
   game.money -= emp.contract
-  game.employees.push({ ...emp, jobLevels: { [emp.role]: 1 } })
+  game.employees.push({ ...emp, jobLevels: { [emp.role]: 1 }, stress: 0 })
   game.scoutCandidates = game.scoutCandidates.filter((c) => c.id !== id)
   game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${man(emp.contract)}）`
 }

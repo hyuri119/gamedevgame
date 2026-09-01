@@ -83,6 +83,8 @@ export function loadGame(slot?: number): boolean {
     // 旧セーブ移行: 職業レベルの初期化
     for (const e of game.employees) {
       if (!e.jobLevels || Object.keys(e.jobLevels).length === 0) e.jobLevels = { [e.role]: 1 }
+      if (e.stress === undefined) e.stress = 0
+      e.resting = e.resting === true
     }
     return true
   } catch {

@@ -1,11 +1,18 @@
 {
   "meta": {
-    "title": "オフィス（会社規模）",
-    "note": "社員上限・週次家賃・描画机数・移転費。移転条件はコード側（canMoveOffice）で判定。"
+    "title": "オフィス（会社規模・休憩室）",
+    "note": "社員上限・週次家賃・描画机数・移転費・休憩室グレード。移転条件はコード側（canMoveOffice）で判定。"
   },
   "offices": [
     { "id": "small", "name": "小規模オフィス", "capacity": 4, "rent": 50000, "desks": 4, "moveCost": 0 },
     { "id": "mid", "name": "中規模オフィス", "capacity": 8, "rent": 200000, "desks": 6, "moveCost": 100000000 },
     { "id": "large", "name": "大規模オフィス", "capacity": 14, "rent": 600000, "desks": 8, "moveCost": 350000000 }
+  ],
+  "lounge": [
+    { "level": 1, "cost": 0, "recover": 5, "relief": 0 },
+    { "level": 2, "cost": 20000000, "recover": 7, "relief": 0.1 },
+    { "level": 3, "cost": 50000000, "recover": 9, "relief": 0.2 },
+    { "level": 4, "cost": 100000000, "recover": 11, "relief": 0.3 },
+    { "level": 5, "cost": 200000000, "recover": 13, "relief": 0.4 }
   ]
 }
