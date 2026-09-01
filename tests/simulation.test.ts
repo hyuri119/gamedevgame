@@ -11,6 +11,7 @@ import {
   game,
   resetGame,
   hire,
+  scout,
   startDev,
   finishGame,
   ship,
@@ -19,10 +20,21 @@ import {
   advanceWeek,
   currentYear,
   month,
+  weekOfMonth,
   availableStores,
   supportsDl,
   loadGame,
   man,
+  employeePool,
+  activeEmployees,
+  currentOffice,
+  maxEmployees,
+  officeRent,
+  moveOffice,
+  moveOfficeReason,
+  upgradeLounge,
+  loungeRecovery,
+  loungeUpgradeCost,
 } from '../src/lib/game.svelte'
 import { kumiawase, availableGenres } from '../src/lib/data'
 
@@ -190,6 +202,8 @@ describe('バランスシミュレーション', () => {
     hire('tanaka')
     hire('sato')
     let devCount = 0
+    let movedMid = false
+    let movedLarge = false
     for (let w = 0; w < 48 * 40; w++) {
       const freeStudio = game.studios.find((s) => !s.dev && !s.completed && !s.contractId && !s.dlc)
       if (freeStudio && game.employees.length > 0) {
@@ -202,17 +216,132 @@ describe('バランスシミュレーション', () => {
         const q = Math.min(Math.floor(ready.completed.expectedSales * 0.9), 500_000)
         ship(q, ready.id, store?.id)
       }
-      // カタログ作品でDLCが出せるなら作る（空きスタジオがあるとき）
-      if (freeStudio && game.catalog.length > 0 && currentYear() >= 1996) {
-        const idx = game.catalog.findIndex((g) => !g.dlcs || g.dlcs.length < 3)
-        if (idx >= 0) startDlc(idx, freeStudio.id)
+      if (game.employees.length < maxEmployees()) {
+        scout()
+        for (const c of game.scoutCandidates) {
+          if (game.employees.length >= maxEmployees()) break
+          if (game.money >= c.contract) hire(c.id)
+        }
       }
+      if (game.catalog.length > 0 && currentYear() >= 1996) {
+        const dlcStudio = game.studios.find(
+          (s) => !s.dev && !s.completed && !s.contractId && !s.dlc,
+        )
+        if (dlcStudio) {
+          const idx = game.catalog.findIndex((g) => !g.dlcs || g.dlcs.length < 3)
+          if (idx >= 0) startDlc(idx, dlcStudio.id)
+        }
+      }
+      if (moveOfficeReason(1) === null) {
+        moveOffice(1)
+        movedMid = true
+      }
+      if (moveOfficeReason(2) === null) {
+        moveOffice(2)
+        movedLarge = true
+      }
+      const loungeCost = loungeUpgradeCost()
+      if (loungeCost !== null && game.money >= loungeCost * 3) upgradeLounge()
       advanceWeek()
       if (game.gameOver) break
     }
+    const dlcTotal = game.catalog.reduce((n, g) => n + (g.dlcs?.length ?? 0), 0)
     console.log(
-      `--- 40年後 --- ${currentYear()}年 / 資金 ${man(game.money)} / 累計販売 ${game.totalSales.toLocaleString()}本 / 作品数 ${devCount} / DLC ${game.catalog.reduce((n, g) => n + (g.dlcs?.length ?? 0), 0)}本`,
+      `--- 40年後 --- ${currentYear()}年 / 資金 ${man(game.money)} / 累計販売 ${game.totalSales.toLocaleString()}本 / 作品数 ${devCount} / DLC ${dlcTotal}本 / オフィス ${currentOffice().name}（社員${game.employees.length}人）/ 休憩室 Lv${game.loungeLevel} / 中移転${movedMid ? '済' : '未'}・大移転${movedLarge ? '済' : '未'}`,
     )
     expect(game.gameOver).toBe(false)
+    expect(dlcTotal).toBeGreaterThan(0)
+  })
+
+  it('オフィス移転で社員上限が増え、受賞なしでは大規模に移れない', () => {
+    reset()
+    expect(currentOffice().id).toBe('small')
+    expect(maxEmployees()).toBe(4)
+    game.money = 1_000_000_000
+    game.week = 3 * 48 + 1 // 4年目
+    const before = game.money
+    moveOffice(1)
+    expect(game.officeLevel).toBe(1)
+    expect(maxEmployees()).toBe(8)
+    expect(game.money).toBe(before - 100_000_000)
+    game.week = 3 * 48 + 45 // 4年目12月
+    expect(month()).toBe(12)
+    expect(moveOfficeReason(2)).toContain(
+      '大規模オフィスへの移転にはデザイン賞と音楽賞の受賞が各1回以上必要です',
+    )
+    game.awards.design = 1
+    game.awards.music = 1
+    expect(moveOfficeReason(2)).toBe(null)
+    moveOffice(2)
+    expect(game.officeLevel).toBe(2)
+    expect(maxEmployees()).toBe(14)
+  })
+
+  it('社員上限を超える雇用は拒否される', () => {
+    reset()
+    game.money = 500_000_000
+    const pool = employeePool.filter(
+      (e) => (e.availableFrom ?? 1983) <= 1983 && e.role !== 'スーパーハッカー',
+    )
+    for (const e of pool.slice(0, 4)) hire(e.id)
+    expect(game.employees.length).toBe(4)
+    hire(pool[4].id)
+    expect(game.employees.length).toBe(4)
+  })
+
+  it('家賃は月の第1週に月額ぶん引かれる', () => {
+    reset()
+    game.week = 4 // 次に消化される週（5週目 = 2月第1週）で家賃支払い
+    const before = game.money
+    advanceWeek()
+    expect(game.money).toBe(before - officeRent() * 4)
+    reset()
+    game.week = 5 // 次に消化される週（6週目 = 2月第2週）では家賃なし
+    const before2 = game.money
+    advanceWeek()
+    expect(game.money).toBe(before2)
+  })
+
+  it('開発中はストレスが上昇し、過労で休養して回復する', () => {
+    reset()
+    hire('tanaka')
+    hire('sato')
+    const c = bestCombo(currentYear())
+    startDev('ストレス検証作品', c.genre, c.content, 'pc', 1)
+    const up = weeksUntil(() => (game.employees[0].stress ?? 0) > 0, 5)
+    expect(up).toBeGreaterThan(0)
+    expect(game.employees[0].stress ?? 0).toBeGreaterThan(0)
+    game.studios[0].dev = null
+    const s0 = game.employees[0].stress ?? 0
+    const down = weeksUntil(() => (game.employees[0].stress ?? 0) < s0, 5)
+    expect(down).toBeGreaterThan(0)
+    startDev('ストレス検証作品2', c.genre, c.content, 'pc', 1)
+    game.employees[0].stress = 99
+    advanceWeek()
+    expect(game.employees[0].resting).toBe(true)
+    expect(activeEmployees().find((e) => e.id === 'tanaka')).toBeUndefined()
+    expect(activeEmployees().some((e) => e.id === 'sato')).toBe(true)
+    const back = weeksUntil(() => !game.employees[0].resting, 20)
+    console.log(
+      `--- ストレス検証 --- 休養 ${back}週で復帰 / 復帰時 stress ${game.employees[0].stress ?? 0}`,
+    )
+    expect(back).toBeGreaterThan(0)
+    expect(game.employees[0].stress ?? 0).toBeLessThanOrEqual(30)
+  })
+
+  it('休憩室の改修で回復量が上がり、最高グレードで打ち止めになる', () => {
+    reset()
+    expect(game.loungeLevel).toBe(1)
+    expect(loungeRecovery()).toBe(5)
+    game.money = 1_000_000_000
+    upgradeLounge()
+    expect(game.loungeLevel).toBe(2)
+    expect(loungeRecovery()).toBe(7)
+    upgradeLounge()
+    upgradeLounge()
+    upgradeLounge()
+    expect(game.loungeLevel).toBe(5)
+    expect(loungeRecovery()).toBe(13)
+    expect(loungeUpgradeCost()).toBe(null)
   })
 })

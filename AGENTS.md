@@ -71,4 +71,5 @@
 - リファクタ済み（`doc/kaizen.md` タスク1〜11完了）: `game.svelte.ts` を7モジュールに分割（バレル経由でimport互換維持）/ `App.svelte` を12コンポーネントに分割（1077行→383行）/ セーブの `SAVE_VERSION` 化と旧形式互換 / `loadGame` 副作用を `main.ts` に分離 / 続編名連番化・スカウトFisher-Yates化・開発開始時の検証追加 / biome 導入（lint: `src/lib/*.ts`・`tests/`）
 - 未実装・アイデア（`doc/siyou.md` §4 参照）: アップデート配信、運営型ゲーム（§4.6）、カジノ/ナゾプンテ再設計
 - オフィス: 規模は小（4人）/中（8人）/大（14人）の3段階。家賃は月1回（第1週）に月額=rent×4を支払い、移転は段階的（中は4年目以降、大は4年目12月以降＋デザイン賞・音楽賞各1回）。`office.svelte.ts` に `officeCatalog/currentOffice/maxEmployees/officeRent/officeDesks/moveOfficeReason/moveOffice` と休憩室（`loungeCatalog/currentLounge/loungeRecovery/loungeRelief/loungeUpgradeCost/upgradeLounge/updateStress`）を集約。休憩室は Lv1〜5（改修費 2000万〜2億円、回復 5〜13/週、ストレス上昇軽減 0〜40%）。`updateStress()` が週次でストレスを更新し、100 で休養（開発から外れ、`activeEmployees()` が対象を返す）。ストレス補正は最大15%低下（`effStats()`）
+- テスト（`tests/simulation.test.ts`・全9テスト）: 40年プレイに移転・雇用・休憩室を組み込み、DLC開始の空きスタジオ探索バグを修正（40年でDLC 38本を検証）。オフィス移転条件・社員上限・家賃・ストレス・休憩室改修の単体検証を追加
 - 次回候補: バランス数値の本調整 / オフィス設計の追加演出（§3.8・§4.4）
