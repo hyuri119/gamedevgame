@@ -8,7 +8,7 @@
 - `npm run dev` — 開発サーバ（http://localhost:5173）
 - `npm run build` — 本番ビルド（`dist/` に出力）
 - `npm run check` — 型チェック（svelte-check）。undefined アクセス等の見落としを検出するので、変更後は必ず実行
-- `npm run test` — vitest によるバランスシミュレーションテスト（`tests/`）。「10年で黒字化」「40年破綻しない」等の健全性チェック
+- `npm run test` — vitest によるバランスシミュレーションテスト（`tests/`・全9テスト）。「10年で黒字化」「40年破綻しない」等の健全性チェック
 - `npm run test:watch` — テストの watch 実行
 - `npm run lint` — biome による lint / フォーマットチェック（対象: `src/lib/*.ts`・`tests/`）。整形は `npm run format`（`biome format --write .`）
 
@@ -24,6 +24,7 @@
   - `src/lib/game.svelte.ts` — バレル（再exportのみ）。既存の import パスはここ経由を維持する
   - `src/lib/state.svelte.ts` — ゲーム状態（`$state` 共有）・インターフェース・定数・土台ヘルパー
   - `src/lib/employees.svelte.ts` — 社員（雇用・教育・進化・転職）
+  - `src/lib/office.svelte.ts` — オフィス規模・移転・休憩室・ストレス更新
   - `src/lib/studio.svelte.ts` — スタジオ・開発・受注・出展・コンテスト
   - `src/lib/sales.svelte.ts` — 出荷・カタログ・DLC・ストア
   - `src/lib/hardware.svelte.ts` — ハード・ライセンス・自社ハード・アーケード
@@ -31,7 +32,7 @@
   - `src/lib/save.svelte.ts` — セーブ/ロード（`SAVE_VERSION` 付き）
   - `src/lib/*.svelte` — UI コンポーネント（`App.svelte` はヘッダと配置のみ。各タブは `*Modal.svelte`）
   - `src/lib/data.ts` — `data/*.json` と `data/kumiawase.csv` の読込・パース
-- `data/` — データ駆動の JSON（ハード・競合ソフト・社員・解放年）と `kumiawase.csv`（内容×ジャンル相性表）
+- `data/` — データ駆動の JSON（ハード・競合ソフト・社員・解放年・オフィス/休憩室）と `kumiawase.csv`（内容×ジャンル相性表）
 - `doc/siyou.md` — マスター仕様書（すべて日本語）
 
 ## ドキュメント
@@ -70,6 +71,7 @@
 - ライセンスUI: ハードモーダルで取得済みを含む全ハード一覧（発売年・現在普及台数・性能・ライセンス料・状態）を表示。スタジオモーダルは各スタジオの状況（開発中/完成品/受注中/DLC制作中/待機）を表示
 - リファクタ済み（`doc/kaizen.md` タスク1〜11完了）: `game.svelte.ts` を7モジュールに分割（バレル経由でimport互換維持）/ `App.svelte` を12コンポーネントに分割（1077行→383行）/ セーブの `SAVE_VERSION` 化と旧形式互換 / `loadGame` 副作用を `main.ts` に分離 / 続編名連番化・スカウトFisher-Yates化・開発開始時の検証追加 / biome 導入（lint: `src/lib/*.ts`・`tests/`）
 - 未実装・アイデア（`doc/siyou.md` §4 参照）: アップデート配信、運営型ゲーム（§4.6）、カジノ/ナゾプンテ再設計
-- オフィス: 規模は小（4人）/中（8人）/大（14人）の3段階。家賃は月1回（第1週）に月額=rent×4を支払い、移転は段階的（中は4年目以降、大は4年目12月以降＋デザイン賞・音楽賞各1回）。`office.svelte.ts` に `officeCatalog/currentOffice/maxEmployees/officeRent/officeDesks/moveOfficeReason/moveOffice` と休憩室（`loungeCatalog/currentLounge/loungeRecovery/loungeRelief/loungeUpgradeCost/upgradeLounge/updateStress`）を集約。休憩室は Lv1〜5（改修費 2000万〜2億円、回復 5〜13/週、ストレス上昇軽減 0〜40%）。`updateStress()` が週次でストレスを更新し、100 で休養（開発から外れ、`activeEmployees()` が対象を返す）。ストレス補正は最大15%低下（`effStats()`）
+- オフィス（`data/offices.json`・`src/lib/office.svelte.ts`）: 規模は小（社員上限4人・週次家賃5万円）/中（8人・20万円）/大（14人・60万円）の3段階。家賃は月の第1週に月額=週次家賃×4を支払い、移転は段階的（小→中→大、ダウングレード不可。中は4年目以降・移転費1億円、大は4年目12月以降・移転費3.5億円＋デザイン賞・音楽賞各1回）。雇用は社員上限まで（スーパーハッカーは大規模のみ・§3.1、買収で付く社員も上限チェック対象）
+- 休憩室・ストレス: 休憩室はテナントではなくオフィス設備（`loungeCatalog/upgradeLounge` 等）。Lv1〜5（改修費 なし〜2億円、休息時回復 5〜13/週、ストレス上昇軽減 0〜40%）。`updateStress()` が週次でストレスを更新（進行中プロジェクトがあれば `+2×(1-軽減)/週`、無ければ `-回復/週`。100 で休養し開発から外れ `activeEmployees()` が対象を返す。休養中は回復×2/週、30以下で復帰）。ストレス補正は stress 50超から逓減し最大15%低下（`effStats()`）
 - テスト（`tests/simulation.test.ts`・全9テスト）: 40年プレイに移転・雇用・休憩室を組み込み、DLC開始の空きスタジオ探索バグを修正（40年でDLC 38本を検証）。オフィス移転条件・社員上限・家賃・ストレス・休憩室改修の単体検証を追加
-- 次回候補: バランス数値の本調整 / オフィス設計の追加演出（§3.8・§4.4）
+- 次回候補: バランス数値の本調整（40年で482億円と資金がインフレ気味。固定費を効かせるか要検討）/ オフィス設計（机配置による効率変化、§3.8・§4.4・未実装）
