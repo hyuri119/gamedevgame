@@ -50,7 +50,7 @@
           <td>{g.reviewScore}点</td>
           <td>{man(unitCost(g.hardwareId))}</td>
           <td>
-            <input class="qty" type="number" bind:value={restockQtys[i]} min="0" placeholder={String(Math.floor(Math.min(g.expectedSales * 0.2, shipCap())))} />
+            <input class="qty" type="number" bind:value={restockQtys[i]} min="0" step="1000" placeholder={String(Math.floor(Math.min(g.expectedSales * 0.2, shipCap()) / 1000) * 1000)} />
             <button onclick={() => restock(i, restockQtys[i] || 0)} disabled={!(restockQtys[i] > 0)}>再出荷</button>
             {#if g.inventory > 0}
               <button onclick={() => disposeCatalog(i)}>処分</button>

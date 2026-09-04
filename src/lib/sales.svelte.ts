@@ -38,7 +38,7 @@ const DLC_NAME_TEMPLATES = [
 export function ship(quantity: number, studioId: number, storeId?: string) {
   const studio = game.studios.find((s) => s.id === studioId)
   if (!studio || !studio.completed) return
-  const q = Math.min(Math.floor(quantity), shipCap())
+  const q = Math.min(Math.floor(quantity / 1000) * 1000, shipCap())
   const hw = findHardware(studio.completed.hardwareId)
   const store = storeId ? storeCatalog.find((s) => s.id === storeId) : undefined
   const useDl = !!store && supportsDl(studio.completed.hardwareId)
@@ -75,7 +75,7 @@ export function ship(quantity: number, studioId: number, storeId?: string) {
 export function restock(idx: number, quantity: number) {
   const g = game.catalog[idx]
   if (!g) return
-  const q = Math.floor(quantity)
+  const q = Math.floor(Math.floor(quantity) / 1000) * 1000
   if (q <= 0) return
   const hw = findHardware(g.hardwareId)
   const cost = productionCost(hw) * q

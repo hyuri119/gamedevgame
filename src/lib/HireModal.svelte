@@ -4,6 +4,7 @@
     hire,
     fire,
     scout,
+    SCOUT_COST,
     train,
     evolve,
     canEvolve,
@@ -25,7 +26,7 @@
 <Modal title="社員" onclose={onclose}>
   <h3>スカウト（雇用）</h3>
   <p class="pnote">小規模オフィスは最大4人まで。オフィスを移転すると雇用人数を増やせます。</p>
-  <button onclick={scout}>スカウトする（候補を探す）</button>
+  <button onclick={scout}>スカウトする（調査費 {(SCOUT_COST / 10000).toLocaleString()}万円）</button>
   {#if game.scoutCandidates.length > 0}
     <table>
       <thead>

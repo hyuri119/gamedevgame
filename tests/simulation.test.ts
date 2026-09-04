@@ -12,6 +12,7 @@ import {
   resetGame,
   hire,
   scout,
+  SCOUT_COST,
   startDev,
   finishGame,
   ship,
@@ -23,6 +24,7 @@ import {
   weekOfMonth,
   availableStores,
   supportsDl,
+  forecastSalesOf,
   loadGame,
   man,
   employeePool,
@@ -419,6 +421,47 @@ describe('バランスシミュレーション', () => {
     const focused = game.employees[0].stress ?? 0
     expect(relaxed).toBeLessThan(standard)
     expect(focused).toBeGreaterThan(standard)
+  })
+
+  it('スカウトには調査費がかかり、資金不足では探せない', () => {
+    reset()
+    const before = game.money
+    scout()
+    expect(game.money).toBe(before - SCOUT_COST)
+    expect(game.scoutCandidates.length).toBeGreaterThan(0)
+    reset()
+    game.money = SCOUT_COST - 1
+    scout()
+    expect(game.money).toBe(SCOUT_COST - 1)
+    expect(game.scoutCandidates.length).toBe(0)
+  })
+
+  it('売上予測は真値の±15%以内で1000本単位になる', () => {
+    reset()
+    hire('tanaka')
+    hire('sato')
+    const c = bestCombo(currentYear())
+    startDev('予測検証作品', c.genre, c.content, 'pc', 1)
+    weeksUntil(() => !!game.studios[0].completed, 200)
+    const done = game.studios[0].completed!
+    expect(done.expectedSales).toBeGreaterThan(0)
+    expect(forecastSalesOf(done)).toBe(done.forecastSales)
+    expect(done.forecastSales % 1000).toBe(0)
+    const ratio = done.forecastSales / done.expectedSales
+    expect(ratio).toBeGreaterThanOrEqual(0.85)
+    expect(ratio).toBeLessThan(1.15)
+  })
+
+  it('出荷は1000本単位に切り捨てられる', () => {
+    reset()
+    hire('tanaka')
+    hire('sato')
+    const c = bestCombo(currentYear())
+    startDev('出荷単位検証作品', c.genre, c.content, 'pc', 1)
+    weeksUntil(() => !!game.studios[0].completed, 200)
+    ship(5432, 1)
+    expect(game.sales.length).toBe(1)
+    expect(game.sales[0].inventory).toBe(5000)
   })
 
   it('休憩室の改修で回復量が上がり、最高グレードで打ち止めになる', () => {

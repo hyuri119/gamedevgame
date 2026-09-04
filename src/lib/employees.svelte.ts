@@ -13,6 +13,8 @@ import { maxEmployees, currentOffice } from './office.svelte'
 
 const roles = rolesData.roles as Record<string, RoleDef>
 
+export const SCOUT_COST = 2_000_000
+
 export function jobLevels(emp: Employee): Record<string, number> {
   return emp.jobLevels ?? { [emp.role]: 1 }
 }
@@ -151,8 +153,13 @@ export function hire(id: string) {
   game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${man(emp.contract)}）`
 }
 
-// スカウト（雇用候補をランダムに数人提示）
+// スカウト（雇用候補をランダムに数人提示。調査費がかかる）
 export function scout() {
+  if (game.money < SCOUT_COST) {
+    game.lastReport = `スカウト調査費が足りません（${man(SCOUT_COST)} 必要）`
+    return
+  }
+  game.money -= SCOUT_COST
   const y = currentYear()
   const unhired = employeePool.filter(
     (e) => !game.employees.some((h) => h.id === e.id) && (e.availableFrom ?? START_YEAR) <= y,

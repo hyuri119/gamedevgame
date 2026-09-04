@@ -8,6 +8,7 @@
     ship,
     resetGame,
     shipCap,
+    forecastSalesOf,
     hasLicense,
     man,
     devTarget,
@@ -172,8 +173,8 @@
     {#each game.studios.filter((s) => s.completed) as s (s.id)}
       <div class="prow">
         <span class="plabel">{s.name}: 「{s.completed!.name}」完成（レビュー {s.completed!.reviewScore}点）</span>
-        <button onclick={() => ship(Math.min(s.completed!.expectedSales, shipCap()), s.id)}>
-          出荷（{Math.min(s.completed!.expectedSales, shipCap()).toLocaleString()}本）
+        <button onclick={() => ship(Math.min(forecastSalesOf(s.completed!), shipCap()), s.id)}>
+          出荷（{Math.min(forecastSalesOf(s.completed!), shipCap()).toLocaleString()}本）
         </button>
         <button onclick={() => (activeTab = 'dev')}>詳細</button>
       </div>

@@ -48,6 +48,7 @@ export interface CompletedGame {
   reviewScore: number
   hallOfFame: boolean
   expectedSales: number
+  forecastSales: number
   price: number
   licenseFee: number
   storeFee: number
@@ -405,6 +406,17 @@ export function compatCoeff(genre: string, content: string): number {
 
 export function freeStudio(): Studio | undefined {
   return game.studios.find((s) => !s.dev && !s.completed && !s.contractId && !s.dlc)
+}
+
+// 売上予測（真の期待売上の±15%。1000本単位に丸めた表示用。旧セーブ互換でフォールバックあり）
+export function forecastSalesOf(g: { expectedSales: number; forecastSales?: number }): number {
+  return g.forecastSales ?? g.expectedSales
+}
+
+export function makeForecast(expected: number): number {
+  const h = (((expected * 2654435761) >>> 0) % 1000) / 1000
+  const noisy = expected * (0.85 + h * 0.3)
+  return Math.max(1000, Math.round(noisy / 1000) * 1000)
 }
 
 export function resetGame() {

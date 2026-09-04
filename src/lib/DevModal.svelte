@@ -5,6 +5,7 @@
     finishGame,
     ship,
     shipCap,
+    forecastSalesOf,
     unitCost,
     availableStores,
     compatMark,
@@ -87,12 +88,12 @@
         <ul>
           <li>おもしろさ {s.completed.fun} / 独創性 {s.completed.creativity}</li>
           <li>グラフィック {s.completed.graphics} / 音楽 {s.completed.music} / バグ {s.completed.bug}</li>
-          <li>期待売上 約 {s.completed.expectedSales.toLocaleString()}本</li>
+          <li>売上予測 約 {forecastSalesOf(s.completed).toLocaleString()}本（実績とは±15%ほどブレます）</li>
         </ul>
         <div class="ship">
           <label>
-            出荷本数（上限 {shipCap().toLocaleString()}本）:
-            <input type="number" bind:value={shipQtys[s.id]} min="0" placeholder={String(Math.min(s.completed!.expectedSales, shipCap()))} />
+            出荷本数（1000本単位・上限 {shipCap().toLocaleString()}本）:
+            <input type="number" bind:value={shipQtys[s.id]} min="0" step="1000" placeholder={String(Math.min(forecastSalesOf(s.completed!), shipCap()))} />
           </label>
           <label>
             販売先
@@ -106,8 +107,8 @@
           {#if shipQtys[s.id] > 0}
             <span>生産費計 {man((shipStores[s.id] ? 0 : unitCost(s.completed!.hardwareId)) * shipQtys[s.id])}</span>
           {/if}
-          <button onclick={() => ship(shipQtys[s.id] || s.completed!.expectedSales, s.id, shipStores[s.id] || undefined)}>出荷する</button>
-          <button onclick={() => (shipQtys[s.id] = Math.min(s.completed!.expectedSales, shipCap()))}>期待売上分</button>
+          <button onclick={() => ship(shipQtys[s.id] || forecastSalesOf(s.completed!), s.id, shipStores[s.id] || undefined)}>出荷する</button>
+          <button onclick={() => (shipQtys[s.id] = Math.min(forecastSalesOf(s.completed!), shipCap()))}>予測分</button>
         </div>
       {:else if s.contractId}
         <p>受注案件を開発中</p>
