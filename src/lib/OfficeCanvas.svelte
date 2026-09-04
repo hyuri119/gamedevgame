@@ -131,8 +131,12 @@
     return out;
   }
 
+  const empSpr = new Image();
+  empSpr.src = import.meta.env.BASE_URL + 'sprites/emp-back.png';
+
   function draw() {
     const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#f5ecd9';
     ctx.fillRect(0, 0, W, H);
 
@@ -455,32 +459,26 @@
       const as = assign.get(e.id);
       const isWork = !!as;
       const bobY = isWork ? Math.sin(a.bob / 5) * 2 : Math.sin(a.bob / 8) * 1;
-      // 体
+      // 影（社員色で識別）
       ctx.fillStyle = a.color;
       ctx.beginPath();
-      ctx.arc(a.x, a.y + bobY, 13, 0, Math.PI * 2);
+      ctx.ellipse(a.x, a.y + bobY + 16, 12, 4, 0, 0, Math.PI * 2);
       ctx.fill();
-      // 顔
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(a.x, a.y + bobY - 4, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#222';
-      ctx.beginPath();
-      ctx.arc(a.x - 2, a.y + bobY - 4, 1.3, 0, Math.PI * 2);
-      ctx.arc(a.x + 2, a.y + bobY - 4, 1.3, 0, Math.PI * 2);
-      ctx.fill();
+      // ドット絵スプライト（後ろ姿）
+      if (empSpr.complete && empSpr.naturalWidth > 0) {
+        ctx.drawImage(empSpr, a.x - 15, a.y + bobY - 24, 30, 40);
+      }
       // 名前（頭の上）
       ctx.fillStyle = '#666';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(e.name.slice(0, 1), a.x, a.y + bobY + 20);
+      ctx.fillText(e.name.slice(0, 1), a.x, a.y + bobY + 28);
 
       // 疲労マーク（ストレス70以上）
       if ((e.stress ?? 0) >= 70) {
         ctx.fillStyle = '#c0392b';
         ctx.font = 'bold 13px sans-serif';
-        ctx.fillText('!', a.x + 10, a.y + bobY - 18);
+        ctx.fillText('!', a.x + 13, a.y + bobY - 26);
       }
 
       if (isWork && as!.seat === 0) {
