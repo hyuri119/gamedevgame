@@ -13,7 +13,31 @@ import { maxEmployees, currentOffice } from './office.svelte'
 
 const roles = rolesData.roles as Record<string, RoleDef>
 
+export interface ScoutMethod {
+  id: string
+  name: string
+  cost: number
+  from: number
+  to: number
+  desc: string
+}
+
+export const SCOUT_METHODS: ScoutMethod[] = [
+  { id: 'hello', name: 'ハローワーク', cost: 0, from: 0.3, to: 1.0, desc: '無料だが上位30%は来ない' },
+  { id: 'magazine', name: '求人雑誌', cost: 2_000_000, from: 0.0, to: 1.0, desc: '広く募集（誰でも来る）' },
+  { id: 'agent', name: '人材紹介', cost: 8_000_000, from: 0.0, to: 0.5, desc: '上位半分から厳選' },
+  { id: 'headhunt', name: 'ヘッドハンティング', cost: 20_000_000, from: 0.0, to: 0.25, desc: '上位25%の精鋭のみ' },
+]
+
 export const SCOUT_COST = 2_000_000
+
+export function scoutCost(id: string): number {
+  return SCOUT_METHODS.find((m) => m.id === id)?.cost ?? SCOUT_COST
+}
+
+function candidateScore(e: Employee): number {
+  return e.fun + e.creativity + e.graphics + e.music + e.speed + e.level * 5
+}
 
 export function jobLevels(emp: Employee): Record<string, number> {
   return emp.jobLevels ?? { [emp.role]: 1 }
@@ -153,18 +177,22 @@ export function hire(id: string) {
   game.lastReport = `${emp.name}（${emp.role}）を雇用しました（契約金 ${man(emp.contract)}）`
 }
 
-// スカウト（雇用候補をランダムに数人提示。調査費がかかる）
-export function scout() {
-  if (game.money < SCOUT_COST) {
-    game.lastReport = `スカウト調査費が足りません（${man(SCOUT_COST)} 必要）`
+// スカウト（雇用候補をランダムに数人提示。手段によって費用と候補層が変わる）
+export function scout(methodId = 'magazine') {
+  const method = SCOUT_METHODS.find((m) => m.id === methodId) ?? SCOUT_METHODS[1]
+  if (game.money < method.cost) {
+    game.lastReport = `スカウト調査費が足りません（${method.name} は ${man(method.cost)} 必要）`
     return
   }
-  game.money -= SCOUT_COST
+  game.money -= method.cost
   const y = currentYear()
-  const unhired = employeePool.filter(
-    (e) => !game.employees.some((h) => h.id === e.id) && (e.availableFrom ?? START_YEAR) <= y,
-  )
-  const shuffled = [...unhired]
+  const unhired = employeePool
+    .filter((e) => !game.employees.some((h) => h.id === e.id) && (e.availableFrom ?? START_YEAR) <= y)
+    .sort((a, b) => candidateScore(b) - candidateScore(a))
+  const lo = Math.floor(unhired.length * method.from)
+  const hi = Math.max(lo + 1, Math.ceil(unhired.length * method.to))
+  const target = unhired.slice(lo, hi)
+  const shuffled = [...target]
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
@@ -173,7 +201,7 @@ export function scout() {
   if (game.scoutCandidates.length === 0) {
     game.lastReport = '雇用できる候補がいません'
   } else {
-    game.lastReport = `${game.scoutCandidates.length}人の候補が見つかりました`
+    game.lastReport = `${method.name}で${game.scoutCandidates.length}人の候補が見つかりました`
   }
 }
 

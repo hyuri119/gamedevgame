@@ -436,6 +436,33 @@ describe('バランスシミュレーション', () => {
     expect(game.scoutCandidates.length).toBe(0)
   })
 
+  it('スカウト手段で候補層が変わる（高いほど精鋭）', () => {
+    reset()
+    game.money = 1_000_000_000
+    const score = (e: { fun: number; creativity: number; graphics: number; music: number; speed: number; level: number }) =>
+      e.fun + e.creativity + e.graphics + e.music + e.speed + e.level * 5
+    const pool = employeePool
+      .filter((e) => (e.availableFrom ?? 1983) <= 1983)
+      .sort((a, b) => score(b) - score(a))
+    scout('hello')
+    expect(game.scoutCandidates.length).toBeGreaterThan(0)
+    for (const c of game.scoutCandidates) {
+      const rank = pool.findIndex((e) => e.id === c.id)
+      expect(rank).toBeGreaterThanOrEqual(Math.floor(pool.length * 0.3))
+    }
+    scout('headhunt')
+    expect(game.money).toBe(1_000_000_000 - 20_000_000)
+    for (const c of game.scoutCandidates) {
+      const rank = pool.findIndex((e) => e.id === c.id)
+      expect(rank).toBeLessThan(Math.ceil(pool.length * 0.25))
+    }
+    reset()
+    game.money = 19_999_999
+    scout('headhunt')
+    expect(game.money).toBe(19_999_999)
+    expect(game.scoutCandidates.length).toBe(0)
+  })
+
   it('売上予測は真値の±15%以内で1000本単位になる', () => {
     reset()
     hire('tanaka')

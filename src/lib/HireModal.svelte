@@ -4,7 +4,8 @@
     hire,
     fire,
     scout,
-    SCOUT_COST,
+    SCOUT_METHODS,
+    scoutCost,
     train,
     evolve,
     canEvolve,
@@ -25,8 +26,22 @@
 
 <Modal title="社員" onclose={onclose}>
   <h3>スカウト（雇用）</h3>
-  <p class="pnote">小規模オフィスは最大4人まで。オフィスを移転すると雇用人数を増やせます。</p>
-  <button onclick={scout}>スカウトする（調査費 {(SCOUT_COST / 10000).toLocaleString()}万円）</button>
+  <p class="pnote">小規模オフィスは最大4人まで。オフィスを移転すると雇用人数を増やせます。お金をかけるほど優秀な候補が来ます。</p>
+  <table>
+    <thead>
+      <tr><th>調査方法</th><th>費用</th><th>候補層</th><th></th></tr>
+    </thead>
+    <tbody>
+      {#each SCOUT_METHODS as m (m.id)}
+        <tr>
+          <td>{m.name}</td>
+          <td>{m.cost === 0 ? '無料' : `${(m.cost / 10000).toLocaleString()}万`}</td>
+          <td>{m.desc}</td>
+          <td><button onclick={() => scout(m.id)} disabled={game.money < scoutCost(m.id)}>探す</button></td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
   {#if game.scoutCandidates.length > 0}
     <table>
       <thead>
