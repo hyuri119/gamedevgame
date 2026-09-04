@@ -138,6 +138,7 @@
         {#if s.dev!.stage === '開発'}
           <progress value={Math.min(100, (s.dev!.progress / devTarget(s.dev!.hardwareId)) * 100)} max={100}></progress>
           <span class="pct">{Math.floor(Math.min(100, (s.dev!.progress / devTarget(s.dev!.hardwareId)) * 100))}%</span>
+          <span class="pnote">バグ {Math.floor(s.dev!.bug)}</span>
         {:else}
           <progress value={bugCleared(s.dev!.bug)} max={100}></progress>
           <span class="pnote">バグ {Math.floor(s.dev!.bug)}</span>
