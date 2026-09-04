@@ -41,13 +41,17 @@
   let devName = $state('私のゲーム');
   let devGenre = $state('');
   let devContent = $state('');
-  let devHardware = $state('');
+  let devHardware = $state('pc');
   let devStudio = $state(0);
+
+  const hwOptions = $derived([...licensedHardware, ...game.ownHardware]);
 
   $effect(() => {
     if (!genres.includes(devGenre)) devGenre = genres[0] ?? '';
     if (!contents.includes(devContent)) devContent = contents[0] ?? '';
     if (!idleStudios.some((s) => s.id === devStudio)) devStudio = idleStudios[0]?.id ?? 0;
+    if (!hwOptions.some((h) => h.id === devHardware))
+      devHardware = hwOptions.some((h) => h.id === 'pc') ? 'pc' : (hwOptions[0]?.id ?? '');
   });
 
   const compat = $derived(compatMark(devGenre, devContent));
@@ -60,10 +64,8 @@
   const bugCleared = (bug: number) => Math.max(0, Math.min(100, 100 - (bug / 30) * 100));
 
   function onStartDev() {
-    if (!devStudio) return;
-    const hwId = devHardware || licensedHardware[0]?.id || game.ownHardware[0]?.id;
-    if (!hwId) return;
-    startDev(devName, devGenre, devContent, hwId, devStudio);
+    if (!devStudio || !devHardware) return;
+    startDev(devName, devGenre, devContent, devHardware, devStudio);
   }
 </script>
 
@@ -145,7 +147,6 @@
       <label>
         ハード
         <select bind:value={devHardware}>
-          <option value="">（自動: 最初の1番目）</option>
           {#each licensedHardware as h}<option value={h.id}>{h.name}（{h.realName}・性能{hardwarePower(h.id)}）</option>{/each}
           {#each game.ownHardware as h}<option value={h.id}>{h.name}（自社・ライセンス0円・性能{h.params.power}）</option>{/each}
         </select>
