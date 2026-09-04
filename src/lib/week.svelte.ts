@@ -26,6 +26,8 @@ import { saveGame } from './save.svelte'
 
 const LONG_TAIL_RATE = 0.005 // ロングテール週間販売率（期待売上の0.5%/週）
 const LONG_TAIL_CAP = 1.5 // 累計需要の上限（期待売上の1.5倍）
+const SALARY_INFLATION_PER_YEAR = 0.04 // 物価スライド（年俸支払い額に年4%ずつ上乗せ）
+const ANNUAL_RAISE = 1.02 // 定期昇給（毎年4月に年俸+2%）
 
 export function advanceWeek() {
   if (game.gameOver) return
@@ -271,12 +273,14 @@ export function advanceWeek() {
     }
   }
 
-  // 年俸支払い（毎年4月、1回だけ）
+  // 年俸支払い（毎年4月、1回だけ。物価スライド＋定期昇給あり）
   if (month() === 4 && game.salaryYear !== year()) {
     game.salaryYear = year()
-    const totalSalary = game.employees.reduce((s, e) => s + e.salary, 0)
+    const scale = 1 + SALARY_INFLATION_PER_YEAR * (year() - 1)
+    const totalSalary = Math.round(game.employees.reduce((s, e) => s + e.salary, 0) * scale)
     if (totalSalary > 0) {
       game.money -= totalSalary
+      for (const e of game.employees) e.salary = Math.round(e.salary * ANNUAL_RAISE)
       reports.push(`4月の年俸支払い ${man(totalSalary)}`)
     }
   }
