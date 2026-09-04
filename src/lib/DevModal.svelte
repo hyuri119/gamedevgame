@@ -109,6 +109,11 @@
           {#if shipQtys[s.id] > 0}
             <span>生産費計 {man((shipStores[s.id] ? 0 : unitCost(s.completed!.hardwareId)) * shipQtys[s.id])}</span>
           {/if}
+          <button onclick={() => (shipQtys[s.id] = Math.max(0, (shipQtys[s.id] || 0) - 1000))}>−1000</button>
+          <button onclick={() => (shipQtys[s.id] = Math.min(shipCap(), (shipQtys[s.id] || 0) + 1000))}>+1000</button>
+          {#each [50, 80, 100] as pct}
+            <button onclick={() => (shipQtys[s.id] = Math.min(shipCap(), Math.floor(((forecastSalesOf(s.completed!) * pct) / 100 / 1000)) * 1000))}>予測の{pct}%</button>
+          {/each}
           <button onclick={() => ship(shipQtys[s.id] || forecastSalesOf(s.completed!), s.id, shipStores[s.id] || undefined)}>出荷する</button>
           <button onclick={() => (shipQtys[s.id] = Math.min(forecastSalesOf(s.completed!), shipCap()))}>予測分</button>
         </div>
