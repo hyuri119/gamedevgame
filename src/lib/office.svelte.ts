@@ -1,5 +1,7 @@
 import officesData from '../../data/offices.json'
-import { game, year, month, man } from './state.svelte'
+import { game, year, month, man, type OfficeLayout } from './state.svelte'
+
+const DESK_COST = 5_000_000
 
 export interface Office {
   id: string
@@ -60,6 +62,7 @@ export function updateStress(): string[] {
     game.activeContract !== null ||
     game.hwProject !== null ||
     game.arcadeProject !== null
+  const crowded = crowding() > 1.5
   for (const e of game.employees) {
     e.stress ??= 0
     if (e.resting === true) {
@@ -69,7 +72,11 @@ export function updateStress(): string[] {
         reports.push(`${e.name} が休養から復帰しました`)
       }
     } else if (hasProject) {
-      e.stress += 2 * (1 - loungeRelief())
+      let gain = 2 * (1 - loungeRelief())
+      if (game.layout === 'relaxed') gain *= 0.7
+      if (game.layout === 'focused') gain += 0.5
+      if (crowded) gain += 1
+      e.stress += gain
     } else {
       e.stress -= loungeRecovery()
     }
@@ -95,7 +102,57 @@ export function officeRent(): number {
 }
 
 export function officeDesks(): number {
-  return currentOffice().desks
+  return game.desks ?? currentOffice().desks
+}
+
+export function maxDesks(): number {
+  return currentOffice().capacity
+}
+
+export function deskCost(): number {
+  return DESK_COST
+}
+
+export function buyDesk() {
+  if (desks() >= maxDesks()) {
+    game.lastReport = 'これ以上机を置けません（上限は社員上限と同数です）'
+    return
+  }
+  if (game.money < DESK_COST) {
+    game.lastReport = `机の増設費用が足りません（${man(DESK_COST)} 必要）`
+    return
+  }
+  game.money -= DESK_COST
+  game.desks = desks() + 1
+  game.lastReport = `机を増設しました（${game.desks}机 / 上限${maxDesks()}机）`
+}
+
+export function desks(): number {
+  return game.desks ?? currentOffice().desks
+}
+
+export function crowding(): number {
+  if (game.employees.length === 0) return 0
+  return game.employees.length / Math.max(1, desks())
+}
+
+export function layoutSpeedMul(): number {
+  const c = crowding()
+  const deskMul = game.employees.length === 0 || c < 1 ? 1.05 : c <= 1.5 ? 1.0 : 0.9
+  const layoutMul = game.layout === 'focused' ? 1.1 : 1.0
+  return deskMul * layoutMul
+}
+
+export const layoutCatalog: { id: OfficeLayout; name: string; desc: string }[] = [
+  { id: 'focused', name: '集中型', desc: '開発速度+10%、ストレスが少し溜まりやすい' },
+  { id: 'standard', name: '標準', desc: 'バランスの取れた配置' },
+  { id: 'relaxed', name: 'ゆったり型', desc: '開発中のストレス上昇-30%' },
+]
+
+export function setLayout(id: OfficeLayout) {
+  game.layout = id
+  const l = layoutCatalog.find((x) => x.id === id)
+  game.lastReport = `オフィスのレイアウトを「${l?.name ?? id}」にしました（${l?.desc ?? ''}）`
 }
 
 export function moveOfficeReason(idx: number): string | null {
@@ -120,5 +177,6 @@ export function moveOffice(idx: number) {
   const office = officeCatalog[idx]
   game.money -= office.moveCost
   game.officeLevel = idx
-  game.lastReport = `${office.name}に移転しました（社員上限 ${office.capacity}人 / 月額家賃 ${man(office.rent * 4)}）`
+  game.desks = office.desks
+  game.lastReport = `${office.name}に移転しました（社員上限 ${office.capacity}人 / 月額家賃 ${man(office.rent * 4)} / 机数 ${office.desks}）`
 }

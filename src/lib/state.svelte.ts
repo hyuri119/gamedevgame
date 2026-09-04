@@ -187,6 +187,8 @@ interface ActiveContract {
   studioId: number
 }
 
+export type OfficeLayout = 'focused' | 'standard' | 'relaxed'
+
 export type GameEvent = { type: 'decks' }
 
 export const contractCatalog: Contract[] = contractsData.contracts
@@ -289,6 +291,8 @@ const initialState = {
   lastReport: 'ようこそ！社員を雇用してゲーム開発を始めましょう。' as string,
   gameOver: false,
   officeLevel: 0,
+  desks: 4,
+  layout: 'standard' as OfficeLayout,
   loungeLevel: 1,
   awards: { design: 0, music: 0 },
   salaryYear: 1,

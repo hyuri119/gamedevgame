@@ -15,6 +15,14 @@
     officeCatalog,
     moveOfficeReason,
     moveOffice,
+    desks,
+    maxDesks,
+    deskCost,
+    buyDesk,
+    crowding,
+    layoutSpeedMul,
+    layoutCatalog,
+    setLayout,
     loungeRecovery,
     loungeRelief,
     loungeUpgradeCost,
@@ -49,6 +57,33 @@
               <button onclick={() => moveOffice(officeCatalog.indexOf(o))}>移転</button>
             {:else}
               <span class="pnote">{moveOfficeReason(officeCatalog.indexOf(o))}</span>
+            {/if}
+          </td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+
+  <h3>机・レイアウト（開発速度 ×{layoutSpeedMul().toFixed(2)}）</h3>
+  <p class="pnote">
+    机数 {desks()} / 上限 {maxDesks()}机 / 混雑度 {crowding().toFixed(1)}人/机
+    {game.employees.length === 0 ? '' : crowding() < 1 ? '（快適：速度+5%）' : crowding() <= 1.5 ? '（普通）' : '（混雑：速度-10%・ストレス増）'}
+  </p>
+  <button onclick={buyDesk} disabled={desks() >= maxDesks() || game.money < deskCost()}>机を増設（{man(deskCost())}）</button>
+  <table>
+    <thead>
+      <tr><th>レイアウト</th><th>効果</th><th></th></tr>
+    </thead>
+    <tbody>
+      {#each layoutCatalog as l (l.id)}
+        <tr>
+          <td>{l.name}</td>
+          <td>{l.desc}</td>
+          <td>
+            {#if game.layout === l.id}
+              適用中
+            {:else}
+              <button onclick={() => setLayout(l.id)}>変更</button>
             {/if}
           </td>
         </tr>

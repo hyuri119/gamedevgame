@@ -32,6 +32,13 @@ import {
   officeRent,
   moveOffice,
   moveOfficeReason,
+  buyDesk,
+  desks,
+  maxDesks,
+  deskCost,
+  crowding,
+  layoutSpeedMul,
+  setLayout,
   upgradeLounge,
   loungeRecovery,
   loungeUpgradeCost,
@@ -327,6 +334,91 @@ describe('バランスシミュレーション', () => {
     )
     expect(back).toBeGreaterThan(0)
     expect(game.employees[0].stress ?? 0).toBeLessThanOrEqual(30)
+  })
+
+  it('机は上限まで増設でき、上限超過は拒否される', () => {
+    reset()
+    game.money = 1_000_000_000
+    game.week = 3 * 48 + 1 // 4年目
+    expect(desks()).toBe(4)
+    expect(maxDesks()).toBe(4)
+    buyDesk()
+    expect(desks()).toBe(4)
+    moveOffice(1)
+    expect(desks()).toBe(6)
+    expect(maxDesks()).toBe(8)
+    const before = game.money
+    buyDesk()
+    expect(desks()).toBe(7)
+    expect(game.money).toBe(before - deskCost())
+    buyDesk()
+    expect(desks()).toBe(8)
+    buyDesk()
+    expect(desks()).toBe(8)
+  })
+
+  it('混雑度で開発速度が変わり、机に余裕があるとボーナスが付く', () => {
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    expect(crowding()).toBe(0.5)
+    expect(layoutSpeedMul()).toBeCloseTo(1.05, 5)
+    hire('suzuki')
+    hire('yamada')
+    expect(crowding()).toBe(1)
+    expect(layoutSpeedMul()).toBeCloseTo(1.0, 5)
+    game.desks = 2
+    expect(crowding()).toBe(2)
+    expect(layoutSpeedMul()).toBeCloseTo(0.9, 5)
+    game.desks = 3
+    expect(layoutSpeedMul()).toBeCloseTo(1.0, 5)
+  })
+
+  it('移転で机数は新オフィスの既定値になる', () => {
+    reset()
+    game.money = 1_000_000_000
+    game.week = 3 * 48 + 1 // 4年目
+    moveOffice(1)
+    buyDesk()
+    expect(desks()).toBe(7)
+    game.week = 3 * 48 + 45 // 4年目12月
+    game.awards.design = 1
+    game.awards.music = 1
+    moveOffice(2)
+    expect(desks()).toBe(8)
+  })
+
+  it('レイアウトで速度とストレス上昇が変わる', () => {
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    setLayout('focused')
+    expect(layoutSpeedMul()).toBeCloseTo(1.05 * 1.1, 5)
+    setLayout('relaxed')
+    expect(layoutSpeedMul()).toBeCloseTo(1.05, 5)
+    const c = bestCombo(currentYear())
+    startDev('レイアウト検証作品', c.genre, c.content, 'pc', 1)
+    advanceWeek()
+    const relaxed = game.employees[0].stress ?? 0
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    startDev('レイアウト検証作品', c.genre, c.content, 'pc', 1)
+    advanceWeek()
+    const standard = game.employees[0].stress ?? 0
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    setLayout('focused')
+    startDev('レイアウト検証作品', c.genre, c.content, 'pc', 1)
+    advanceWeek()
+    const focused = game.employees[0].stress ?? 0
+    expect(relaxed).toBeLessThan(standard)
+    expect(focused).toBeGreaterThan(standard)
   })
 
   it('休憩室の改修で回復量が上がり、最高グレードで打ち止めになる', () => {
