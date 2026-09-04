@@ -5,6 +5,11 @@
     finishGame,
     ship,
     shipCap,
+    shipLevelCost,
+    bulkShipCost,
+    canLevelUpShip,
+    levelUpShip,
+    bulkShipBoost,
     forecastSalesOf,
     unitCost,
     availableStores,
@@ -92,6 +97,15 @@
           <li>グラフィック {s.completed.graphics} / 音楽 {s.completed.music} / バグ {s.completed.bug}</li>
           <li>売上予測 約 {forecastSalesOf(s.completed).toLocaleString()}本（実績とは±15%ほどブレます）</li>
         </ul>
+        <div class="ship">
+          <span>出荷Lv{game.shipLevel}（上限 {shipCap().toLocaleString()}本）</span>
+          <button onclick={levelUpShip} disabled={!canLevelUpShip() || game.money < shipLevelCost()}>
+            出荷レベルアップ（{man(shipLevelCost())}/月1回）
+          </button>
+          <button onclick={bulkShipBoost} disabled={game.money < bulkShipCost()}>
+            大型生産力増強（{man(bulkShipCost())}で+10Lv）
+          </button>
+        </div>
         <div class="ship">
           <label>
             出荷本数（1000本単位・上限 {shipCap().toLocaleString()}本）:

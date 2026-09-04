@@ -206,6 +206,10 @@ export function scout(methodId = 'magazine') {
 }
 
 export function fire(id: string) {
+  if (id === 'player') {
+    game.lastReport = 'あなた（社長）は解雇できません'
+    return
+  }
   game.employees = game.employees.filter((e) => e.id !== id)
   for (const s of game.studios) {
     if (s.leadId === id) s.leadId = null

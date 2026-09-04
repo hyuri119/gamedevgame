@@ -4,6 +4,8 @@ import {
   hasTenant,
   storeCatalog,
   man,
+  year,
+  month,
   type Studio,
   type CatalogGame,
   type RoleBonus,
@@ -34,6 +36,55 @@ const DLC_NAME_TEMPLATES = [
   'コスチューム集',
   '追加モード',
 ]
+
+const SHIP_LEVEL_COST = 1_000_000 // 出荷レベルアップ費用（1レベルあたり。レベルに比例して上昇）
+const BULK_SHIP_LEVELS = 10 // 大型生産力増強で上がるレベル数
+const BULK_SHIP_COST_MUL = 100 // 大型生産力増強の費用倍率（通常の100倍）
+
+// ---- 出荷レベル（本家式。初期上限1万本・月1回レベルアップ可） ----
+
+function shipMonthKey(): number {
+  return year() * 100 + month()
+}
+
+export function shipLevelCost(): number {
+  return SHIP_LEVEL_COST * (game.shipLevel ?? 1)
+}
+
+export function bulkShipCost(): number {
+  return shipLevelCost() * BULK_SHIP_COST_MUL
+}
+
+export function canLevelUpShip(): boolean {
+  return game.shipLevelMonth !== shipMonthKey()
+}
+
+export function levelUpShip() {
+  if (!canLevelUpShip()) {
+    game.lastReport = '出荷レベルアップは月に1回までです'
+    return
+  }
+  const cost = shipLevelCost()
+  if (game.money < cost) {
+    game.lastReport = `レベルアップ費用が足りません（${man(cost)} 必要）`
+    return
+  }
+  game.money -= cost
+  game.shipLevel = (game.shipLevel ?? 1) + 1
+  game.shipLevelMonth = shipMonthKey()
+  game.lastReport = `出荷レベルが Lv${game.shipLevel} に上がりました（上限 ${shipCap().toLocaleString()}本）`
+}
+
+export function bulkShipBoost() {
+  const cost = bulkShipCost()
+  if (game.money < cost) {
+    game.lastReport = `増強費用が足りません（${man(cost)} 必要）`
+    return
+  }
+  game.money -= cost
+  game.shipLevel = (game.shipLevel ?? 1) + BULK_SHIP_LEVELS
+  game.lastReport = `大型生産力増強！出荷レベルが Lv${game.shipLevel} に上がりました（上限 ${shipCap().toLocaleString()}本）`
+}
 
 export function ship(quantity: number, studioId: number, storeId?: string) {
   const studio = game.studios.find((s) => s.id === studioId)
@@ -71,10 +122,18 @@ export function ship(quantity: number, studioId: number, storeId?: string) {
   game.lastReport = `${q.toLocaleString()}本 出荷しました（生産費 ${man(cost)}${channel}）`
 }
 
-// カタログ作品の再出荷
+// カタログ作品の再出荷（月にどれか1本だけ）
+export function canRestock(): boolean {
+  return game.restockMonth !== shipMonthKey()
+}
+
 export function restock(idx: number, quantity: number) {
   const g = game.catalog[idx]
   if (!g) return
+  if (!canRestock()) {
+    game.lastReport = '再出荷は月に1本までです'
+    return
+  }
   const q = Math.floor(Math.floor(quantity) / 1000) * 1000
   if (q <= 0) return
   const hw = findHardware(g.hardwareId)
@@ -85,6 +144,7 @@ export function restock(idx: number, quantity: number) {
   }
   game.money -= cost
   g.inventory += q
+  game.restockMonth = shipMonthKey()
   game.lastReport = `「${g.name}」を再出荷しました（+${q.toLocaleString()}本 / 生産費 ${man(cost)}）`
 }
 

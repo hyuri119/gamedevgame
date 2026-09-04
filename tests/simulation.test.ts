@@ -11,6 +11,7 @@ import {
   game,
   resetGame,
   hire,
+  fire,
   scout,
   SCOUT_COST,
   startDev,
@@ -25,6 +26,11 @@ import {
   availableStores,
   supportsDl,
   forecastSalesOf,
+  canLevelUpShip,
+  levelUpShip,
+  shipLevelCost,
+  bulkShipBoost,
+  shipCap,
   loadGame,
   man,
   employeePool,
@@ -127,7 +133,7 @@ describe('バランスシミュレーション', () => {
     // 初期社員2人（1983年解禁の中で速い組合せ）
     hire('tanaka')
     hire('sato')
-    expect(game.employees.length).toBe(2)
+    expect(game.employees.length).toBe(3)
 
     const moneyLog: string[] = []
     let lastLoggedYear = 0
@@ -145,6 +151,8 @@ describe('バランスシミュレーション', () => {
         const q = Math.min(Math.floor(ready.completed.expectedSales * 0.9), 500_000)
         ship(q, ready.id)
       }
+      if (canLevelUpShip() && shipCap() < 100_000 && game.money >= shipLevelCost() * 2)
+        levelUpShip()
       advanceWeek()
       if (game.gameOver) break
       const y = currentYear()
@@ -164,7 +172,7 @@ describe('バランスシミュレーション', () => {
     reset()
     game.week = (1996 - 1983) * 48 + 1 // 1996年4月から
     // 大所帯にして即開発できる状態を作る（メカニズム検証が目的なので資金は潤沢に）
-    for (const e of ['tanaka', 'sato', 'suzuki', 'yamada']) hire(e)
+    for (const e of ['tanaka', 'sato', 'suzuki']) hire(e)
     expect(game.employees.length).toBe(4)
     game.money = 500_000_000
 
@@ -226,11 +234,13 @@ describe('バランスシミュレーション', () => {
         const q = Math.min(Math.floor(ready.completed.expectedSales * 0.9), 500_000)
         ship(q, ready.id, store?.id)
       }
+      if (canLevelUpShip() && shipCap() < 300_000 && game.money >= shipLevelCost() * 2)
+        levelUpShip()
       if (game.employees.length < maxEmployees()) {
-        scout()
+        if (game.scoutCandidates.length === 0) scout()
         for (const c of game.scoutCandidates) {
           if (game.employees.length >= maxEmployees()) break
-          if (game.money >= c.contract) hire(c.id)
+          if (game.money >= c.contract * 2) hire(c.id)
         }
       }
       if (game.catalog.length > 0 && currentYear() >= 1996) {
@@ -287,6 +297,14 @@ describe('バランスシミュレーション', () => {
     expect(maxEmployees()).toBe(14)
   })
 
+  it('初期社員として社長（あなた）がいて解雇できない', () => {
+    reset()
+    expect(game.employees.length).toBe(1)
+    expect(game.employees[0].id).toBe('player')
+    fire('player')
+    expect(game.employees.length).toBe(1)
+  })
+
   it('社員上限を超える雇用は拒否される', () => {
     reset()
     game.money = 500_000_000
@@ -316,27 +334,28 @@ describe('バランスシミュレーション', () => {
     reset()
     hire('tanaka')
     hire('sato')
+    const tanaka = () => game.employees.find((e) => e.id === 'tanaka')!
     const c = bestCombo(currentYear())
     startDev('ストレス検証作品', c.genre, c.content, 'pc', 1)
-    const up = weeksUntil(() => (game.employees[0].stress ?? 0) > 0, 5)
+    const up = weeksUntil(() => (tanaka().stress ?? 0) > 0, 5)
     expect(up).toBeGreaterThan(0)
-    expect(game.employees[0].stress ?? 0).toBeGreaterThan(0)
+    expect(tanaka().stress ?? 0).toBeGreaterThan(0)
     game.studios[0].dev = null
-    const s0 = game.employees[0].stress ?? 0
-    const down = weeksUntil(() => (game.employees[0].stress ?? 0) < s0, 5)
+    const s0 = tanaka().stress ?? 0
+    const down = weeksUntil(() => (tanaka().stress ?? 0) < s0, 5)
     expect(down).toBeGreaterThan(0)
     startDev('ストレス検証作品2', c.genre, c.content, 'pc', 1)
-    game.employees[0].stress = 99
+    tanaka().stress = 99
     advanceWeek()
-    expect(game.employees[0].resting).toBe(true)
+    expect(tanaka().resting).toBe(true)
     expect(activeEmployees().find((e) => e.id === 'tanaka')).toBeUndefined()
     expect(activeEmployees().some((e) => e.id === 'sato')).toBe(true)
-    const back = weeksUntil(() => !game.employees[0].resting, 20)
+    const back = weeksUntil(() => !tanaka().resting, 20)
     console.log(
-      `--- ストレス検証 --- 休養 ${back}週で復帰 / 復帰時 stress ${game.employees[0].stress ?? 0}`,
+      `--- ストレス検証 --- 休養 ${back}週で復帰 / 復帰時 stress ${tanaka().stress ?? 0}`,
     )
     expect(back).toBeGreaterThan(0)
-    expect(game.employees[0].stress ?? 0).toBeLessThanOrEqual(30)
+    expect(tanaka().stress ?? 0).toBeLessThanOrEqual(30)
   })
 
   it('机は上限まで増設でき、上限超過は拒否される', () => {
@@ -365,7 +384,7 @@ describe('バランスシミュレーション', () => {
     game.money = 500_000_000
     hire('tanaka')
     hire('sato')
-    expect(crowding()).toBe(0.5)
+    expect(crowding()).toBe(0.75)
     expect(layoutSpeedMul()).toBeCloseTo(1.05, 5)
     hire('suzuki')
     hire('yamada')
@@ -480,6 +499,46 @@ describe('バランスシミュレーション', () => {
     expect(ratio).toBeLessThan(1.15)
   })
 
+  it('出荷レベルは初期1万本・月1回レベルアップで上限が伸びる', () => {
+    reset()
+    game.money = 5_000_000_000
+    expect(game.shipLevel).toBe(1)
+    expect(shipCap()).toBe(10000)
+    const before = game.money
+    levelUpShip()
+    expect(game.shipLevel).toBe(2)
+    expect(shipCap()).toBe(20000)
+    expect(game.money).toBe(before - 1_000_000)
+    levelUpShip()
+    expect(game.shipLevel).toBe(2)
+    expect(game.money).toBe(before - 1_000_000)
+    bulkShipBoost()
+    expect(game.shipLevel).toBe(12)
+    expect(game.money).toBe(before - 1_000_000 - 2_000_000 * 100)
+  })
+
+  it('再出荷は月に1本まで', () => {
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    const c = bestCombo(currentYear())
+    startDev('再出荷検証作品', c.genre, c.content, 'pc', 1)
+    weeksUntil(() => !!game.studios[0].completed, 200)
+    ship(10000, 1)
+    weeksUntil(() => game.catalog.length > 0, 20)
+    expect(game.catalog.length).toBe(1)
+    restock(0, 5000)
+    const afterFirst = game.catalog[0].inventory
+    expect(afterFirst).toBeGreaterThan(0)
+    restock(0, 5000)
+    expect(game.catalog[0].inventory).toBe(afterFirst)
+    for (let i = 0; i < 5; i++) advanceWeek()
+    const beforeSecond = game.catalog[0].inventory
+    restock(0, 5000)
+    expect(game.catalog[0].inventory).toBe(beforeSecond + 5000)
+  })
+
   it('自社ソフトの販売でそのハードの普及台数が伸びる（PC除く）', () => {
     reset()
     game.money = 500_000_000
@@ -489,6 +548,7 @@ describe('バランスシミュレーション', () => {
     const c = bestCombo(currentYear())
     startDev('牽引検証作品', c.genre, c.content, 'famicom', 1)
     weeksUntil(() => !!game.studios[0].completed, 200)
+    levelUpShip()
     ship(50000, 1)
     advanceWeek()
     const sold = game.sales[0]?.currentSold ?? 0

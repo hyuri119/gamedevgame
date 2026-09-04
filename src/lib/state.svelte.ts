@@ -227,8 +227,7 @@ export const COMPAT_REVIEW: Record<string, number> = {
 export const HALL_OF_FAME_SCORE = 32
 const MAX_TENANTS = 3
 export const MAX_STUDIOS = 5
-const SHIP_CAP_BASE = 500_000
-const SHIP_CAP_FACTORY = 2_000_000
+const SHIP_QTY_PER_LEVEL = 10_000
 export const ARCADE_DEV_TARGET = 120
 export const ARCADE_WEEKS = 24
 export const ARCADE_INCOME = 30_000
@@ -242,7 +241,6 @@ export interface Tenant {
   cost: number
 }
 export const tenantCatalog: Tenant[] = tenantsData.tenants
-
 export interface Technology {
   id: string
   name: string
@@ -266,16 +264,37 @@ export interface RoleDef {
   bonus: RoleBonus
 }
 
+// 初期社員（プレイヤー自身＝社長。解雇不可・1人目の枠を使う）
+export const PLAYER_EMPLOYEE: Employee = {
+  id: 'player',
+  name: 'あなた',
+  role: 'ディレクター',
+  level: 3,
+  fun: 35,
+  creativity: 35,
+  graphics: 30,
+  music: 25,
+  speed: 35,
+  salary: 6_000_000,
+  contract: 0,
+  availableFrom: 1983,
+  jobLevels: { ディレクター: 1 },
+  stress: 0,
+}
+
 const initialState = {
   money: 100_000_000,
   week: 13, // 4月スタート（1983年4月）
-  employees: [] as Employee[],
+  employees: [{ ...PLAYER_EMPLOYEE, jobLevels: { ...PLAYER_EMPLOYEE.jobLevels } }] as Employee[],
   scoutCandidates: [] as Employee[],
   fame: 0,
   tenants: [] as string[],
   techs: {} as Record<string, number>,
   licenses: [] as string[],
   hwBoost: {} as Record<string, number>,
+  shipLevel: 1,
+  shipLevelMonth: 0,
+  restockMonth: 0,
   ownHardware: [] as OwnHardware[],
   hwProject: null as HwProject | null,
   arcadeProject: null as ArcadeProject | null,
@@ -354,7 +373,7 @@ export function buyTenant(id: string) {
 }
 
 export function shipCap(): number {
-  return hasTenant('factory') ? SHIP_CAP_FACTORY : SHIP_CAP_BASE
+  return SHIP_QTY_PER_LEVEL * (game.shipLevel ?? 1) * (hasTenant('factory') ? 2 : 1)
 }
 
 export function licenseFeeMultiplier(): number {

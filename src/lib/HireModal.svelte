@@ -102,7 +102,7 @@
               </select>
               <button onclick={() => switchJob(e.id, switchChoices[e.id])}>転職</button>
             {/if}
-            <button onclick={() => fire(e.id)}>解雇</button>
+            <button onclick={() => fire(e.id)} disabled={e.id === 'player'} title={e.id === 'player' ? '社長は解雇できません' : ''}>解雇</button>
           </td>
         </tr>
       {/each}

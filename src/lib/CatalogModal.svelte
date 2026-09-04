@@ -2,6 +2,7 @@
   import {
     game,
     restock,
+    canRestock,
     disposeCatalog,
     unitCost,
     shipCap,
@@ -21,6 +22,7 @@
 
 <Modal title="カタログ（継続販売）" onclose={onclose}>
   <h3>継続販売中の作品</h3>
+  <p class="pnote">再出荷は月にどれか1本だけ{canRestock() ? '（今月はまだ出荷できます）' : '（今月は出荷済み）'}。出荷上限 {shipCap().toLocaleString()}本</p>
   <table>
     <thead>
       <tr><th>タイトル</th><th>DLC</th><th>在庫</th><th>累計販売</th><th>レビュー</th><th>1本生産費</th><th>操作</th></tr>
@@ -53,7 +55,7 @@
             <input class="qty" type="number" bind:value={restockQtys[i]} min="0" step="1000" placeholder={String(Math.floor(Math.min(g.expectedSales * 0.2, shipCap()) / 1000) * 1000)} />
             <button onclick={() => (restockQtys[i] = Math.max(0, (restockQtys[i] || 0) - 1000))}>−1000</button>
             <button onclick={() => (restockQtys[i] = Math.min(shipCap(), (restockQtys[i] || 0) + 1000))}>+1000</button>
-            <button onclick={() => restock(i, restockQtys[i] || 0)} disabled={!(restockQtys[i] > 0)}>再出荷</button>
+            <button onclick={() => restock(i, restockQtys[i] || 0)} disabled={!(restockQtys[i] > 0) || !canRestock()}>再出荷</button>
             {#if g.inventory > 0}
               <button onclick={() => disposeCatalog(i)}>処分</button>
             {/if}
@@ -104,6 +106,10 @@
   }
   button {
     cursor: pointer;
+  }
+  .pnote {
+    color: #888;
+    font-size: 0.85rem;
   }
   .qty {
     width: 90px;

@@ -1,6 +1,7 @@
 import {
   game,
   initialStudios,
+  PLAYER_EMPLOYEE,
   START_YEAR,
   WEEKS_PER_YEAR,
   man,
@@ -78,6 +79,9 @@ export function loadGame(slot?: number): boolean {
     if (game.autoExhibit === undefined) game.autoExhibit = false
     if (game.exhibitYear === undefined) game.exhibitYear = 0
     if (game.officeLevel === undefined) game.officeLevel = 0
+    if (game.shipLevel === undefined) game.shipLevel = 1
+    if (game.shipLevelMonth === undefined) game.shipLevelMonth = 0
+    if (game.restockMonth === undefined) game.restockMonth = 0
     if (!game.hwBoost) game.hwBoost = {}
     if (game.desks === undefined) game.desks = 4
     if (game.layout === undefined) game.layout = 'standard'
@@ -88,6 +92,10 @@ export function loadGame(slot?: number): boolean {
       if (!e.jobLevels || Object.keys(e.jobLevels).length === 0) e.jobLevels = { [e.role]: 1 }
       if (e.stress === undefined) e.stress = 0
       e.resting = e.resting === true
+    }
+    // 旧セーブ移行: 初期社員（社長）の補完
+    if (!game.employees.some((e) => e.id === 'player')) {
+      game.employees.unshift({ ...PLAYER_EMPLOYEE, jobLevels: { ...PLAYER_EMPLOYEE.jobLevels } })
     }
     return true
   } catch {
