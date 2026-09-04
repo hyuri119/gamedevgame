@@ -167,7 +167,6 @@ export function advanceWeek() {
       game.money += tailRevenue
       weekRevenue += tailRevenue
       weekSold += tailSold
-      reports.push(`ロングテール販売 ${tailSold.toLocaleString()}本（+${man(tailRevenue)}）`)
     }
   }
 
