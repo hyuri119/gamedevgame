@@ -275,6 +275,7 @@ const initialState = {
   tenants: [] as string[],
   techs: {} as Record<string, number>,
   licenses: [] as string[],
+  hwBoost: {} as Record<string, number>,
   ownHardware: [] as OwnHardware[],
   hwProject: null as HwProject | null,
   arcadeProject: null as ArcadeProject | null,

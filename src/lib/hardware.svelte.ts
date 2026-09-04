@@ -59,7 +59,17 @@ export function effectiveInstallBase(id: string, year: number): number {
   if (age >= PEAK_YEARS) {
     factor *= Math.max(0.2, Math.pow(0.9, age - PEAK_YEARS + 1))
   }
-  return Math.round(hw.installBase * factor)
+  return Math.round(hw.installBase * factor) + (game.hwBoost?.[id] ?? 0)
+}
+
+// キラータイトル効果：自社ソフトの販売本数の1/10がそのハードの普及台数を押し上げる（PC除く）
+const HW_BOOST_RATIO = 0.1
+
+export function addHwBoost(hardwareId: string, sold: number) {
+  const hw = findHardware(hardwareId)
+  if (!hw || hw.type === 'pc' || sold <= 0) return
+  if (!game.hwBoost) game.hwBoost = {}
+  game.hwBoost[hardwareId] = (game.hwBoost[hardwareId] ?? 0) + Math.floor(sold * HW_BOOST_RATIO)
 }
 
 export function licenseCost(id: string): number {

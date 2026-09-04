@@ -19,6 +19,7 @@ import {
   completeArcade,
   supportsDl,
   effectiveInstallBase,
+  addHwBoost,
 } from './hardware.svelte'
 import { completeDlc } from './sales.svelte'
 import { completeDev, performExhibit, holdContest } from './studio.svelte'
@@ -92,6 +93,7 @@ export function advanceWeek() {
       sale.inventory -= sold
       game.totalSales += sold
       sale.currentSold += sold
+      addHwBoost(sale.game.hardwareId, sold)
       weekRevenue += revenue
       weekSold += sold
       reports.push(`「${sale.game.name}」を ${sold.toLocaleString()}本 販売（+${man(revenue)}）`)
@@ -148,6 +150,7 @@ export function advanceWeek() {
         game.totalSales += sold
         tailSold += sold
         tailRevenue += sold * (g.price - g.licenseFee - g.storeFee)
+        addHwBoost(g.hardwareId, sold)
       }
       // ブースト中は在庫切れ分をDL販売で消化（デジタルのため生産費なし・売上単価7割）
       const dlDemand = demand - sold
@@ -157,6 +160,7 @@ export function advanceWeek() {
         game.totalSales += dlDemand
         tailSold += dlDemand
         tailRevenue += revenue
+        addHwBoost(g.hardwareId, dlDemand)
         reports.push(
           `DLCの効果で「${g.name}」が再燃！在庫分を超えてDL販売 ${dlDemand.toLocaleString()}本（+${man(revenue)}）`,
         )

@@ -78,6 +78,7 @@ export function loadGame(slot?: number): boolean {
     if (game.autoExhibit === undefined) game.autoExhibit = false
     if (game.exhibitYear === undefined) game.exhibitYear = 0
     if (game.officeLevel === undefined) game.officeLevel = 0
+    if (!game.hwBoost) game.hwBoost = {}
     if (game.desks === undefined) game.desks = 4
     if (game.layout === undefined) game.layout = 'standard'
     if (game.loungeLevel === undefined) game.loungeLevel = 1

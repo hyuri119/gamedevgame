@@ -32,6 +32,7 @@ import {
   currentOffice,
   maxEmployees,
   officeRent,
+  buyLicense,
   moveOffice,
   moveOfficeReason,
   buyDesk,
@@ -477,6 +478,31 @@ describe('バランスシミュレーション', () => {
     const ratio = done.forecastSales / done.expectedSales
     expect(ratio).toBeGreaterThanOrEqual(0.85)
     expect(ratio).toBeLessThan(1.15)
+  })
+
+  it('自社ソフトの販売でそのハードの普及台数が伸びる（PC除く）', () => {
+    reset()
+    game.money = 500_000_000
+    buyLicense('famicom')
+    hire('tanaka')
+    hire('sato')
+    const c = bestCombo(currentYear())
+    startDev('牽引検証作品', c.genre, c.content, 'famicom', 1)
+    weeksUntil(() => !!game.studios[0].completed, 200)
+    ship(50000, 1)
+    advanceWeek()
+    const sold = game.sales[0]?.currentSold ?? 0
+    expect(sold).toBeGreaterThan(0)
+    expect(game.hwBoost['famicom']).toBe(Math.floor(sold / 10))
+    reset()
+    game.money = 500_000_000
+    hire('tanaka')
+    hire('sato')
+    startDev('PC牽引なし作品', c.genre, c.content, 'pc', 1)
+    weeksUntil(() => !!game.studios[0].completed, 200)
+    ship(10000, 1)
+    advanceWeek()
+    expect(game.hwBoost['pc'] ?? 0).toBe(0)
   })
 
   it('出荷は1000本単位に切り捨てられる', () => {
